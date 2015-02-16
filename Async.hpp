@@ -5,24 +5,38 @@
 
 #include <atomic>
 #include <mutex>
+#include <utility>
 
 namespace as {
 
-/// Dispatch a callback in a thread context, i.e. an ExecutionContext
-template<class Func, class... Args>
-TaskResult< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
-async(ExecutionContext& context, Func&& func, Args&&... args)
+/// Create a Task and deduced TaskResult<> pair
+template<class TaskTag, class Func, class... Args>
+std::pair<
+         Task,
+         TaskResult< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
+        >
+make_task_pair(TaskTag, Func&& func, Args&&... args)
 {
 	auto te =
 		std::make_shared< TaskExecutor< decltype( std::declval<Func>()(std::declval<Args>()...) ) > >(
 			std::forward<Func>(func),
 			std::forward<Args>(args)... );
 
-	auto result = te->GetResult();
+	return std::make_pair( Task{ TaskTag{}, te }, te->GetResult() );
+}
 
-	context.AddTask( Task{ te } );
+/// Dispatch a callback in a thread context, i.e. an ExecutionContext
+template<class Func, class... Args>
+TaskResult< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
+async(ExecutionContext& context, Func&& func, Args&&... args)
+{
+	auto tr_pair = make_task_pair( Task::GenericTag{},
+	                               std::forward<Func>(func),
+	                               std::forward<Args>(args)... );
 
-	return result;
+	context.AddTask( tr_pair.first );
+
+	return tr_pair.second;
 }
 
 /// Dispatch a callback in thread; overload for shared_ptr context
@@ -62,7 +76,7 @@ public:
 		, unlock(std::move(other.unlock))
 	{}
 
-	Obj *operator->() const
+	Obj* operator->() const
 	{
 		return obj;
 	}
@@ -93,8 +107,8 @@ private:
 public:
 	AsyncHandle( TaskResult<T> res )
 		: data( std::make_shared< std::shared_ptr<T> >() )
-		, result( std::move(res) )
 		, mut( std::make_shared< std::mutex >() )
+		, result( std::move(res) )
 	{}
 
 	void Sync() const

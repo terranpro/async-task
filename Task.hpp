@@ -10,6 +10,7 @@
 //#undef AS_USE_COROUTINE_TASKS
 
 #include "TaskContext.hpp"
+#include "TaskExecutor.hpp"
 
 #ifdef AS_USE_COROUTINE_TASKS
 #include "CoroutineTaskContext.hpp"
@@ -117,7 +118,7 @@ public:
 
 template<class Ret>
 struct TaskExecutor
-	: public TaskExecutionConcept
+	: public TaskExecutorBase
 {
 	std::shared_ptr< TaskResultControlBlock<Ret> > ctrl;
 	std::function<Ret()> task_func;
@@ -159,7 +160,7 @@ struct TaskExecutor
 
 template<>
 struct TaskExecutor<void>
-	: public TaskExecutionConcept
+	: public TaskExecutorBase
 {
 	std::shared_ptr< TaskResultControlBlock<void> > ctrl;
 	std::function<void()> task_func;
@@ -199,11 +200,14 @@ struct TaskExecutor<void>
 	}
 };
 
-struct CoroutineTaskTag
-{};
-
-struct GenericTaskTag
-{};
+template<class Func, class... Args>
+std::shared_ptr< TaskExecutorBase >
+make_executor(Func&& func, Args&&... args)
+{
+	return std::make_shared< TaskExecutor< decltype( std::declval<Func>()( std::declval<Args>()... ) ) > >(
+		std::forward<Func>(func),
+		std::forward<Args>(args)... );
+}
 
 class Task
 {
@@ -211,14 +215,14 @@ private:
 	class GenericTaskContext
 		: public TaskContext
 	{
-		std::shared_ptr<TaskExecutionConcept> taskexec;
+		std::shared_ptr<TaskExecutorBase> taskexec;
 
 	public:
 		GenericTaskContext()
 			: taskexec()
 		{}
 
-		GenericTaskContext(std::shared_ptr<TaskExecutionConcept> te)
+		GenericTaskContext(std::shared_ptr<TaskExecutorBase> te)
 			: taskexec( te )
 		{}
 
@@ -235,30 +239,33 @@ private:
 	};
 
 private:
-	std::shared_ptr<TaskExecutionConcept> executor;
+	std::shared_ptr<TaskExecutorBase> executor;
 	std::shared_ptr<TaskContext> context;
+
+public:
+	struct GenericTag {};
+	struct CoroutineTag {};
 
 public:
 	Task() = default;
 
+	// Auto deduced Generic
 	template<class Func, class... Args,
 	         typename = typename std::enable_if<
 		         !std::is_base_of< typename std::remove_reference<Func>::type, Task >::value &&
 		         !std::is_same< typename std::remove_reference<Func>::type,
-		                        std::shared_ptr<TaskExecutionConcept>
+		                        std::shared_ptr<TaskExecutorBase>
 		                         >::value
 	                                           >::type >
 
 	Task(Func&& func, Args&&... args)
-		: executor{ std::make_shared< TaskExecutor< decltype( std::declval<Func>()( std::declval<Args>()... ) ) > >(
-			                                      std::forward<Func>(func),
-			                                      std::forward<Args>(args)... ) }
+		: executor{ make_executor(std::forward<Func>(func), std::forward<Args>(args)...) }
 		, context{ std::make_shared<GenericTaskContext>(executor) }
 	{}
 
 	template<class TEConcept,
 	         typename = typename std::enable_if<
-		         std::is_base_of< TaskExecutionConcept,
+		         std::is_base_of< TaskExecutorBase,
 		                          typename std::remove_reference<TEConcept>::type
 		                        >::value
 	                                           >::type
@@ -268,9 +275,25 @@ public:
 		, context( std::make_shared<GenericTaskContext>(executor) )
 	{}
 
-#ifdef AS_USE_COROUTINE_TASKS
+	// Explicitly Generic
 	template<class Func, class... Args>
-	Task(CoroutineTaskTag, Func&& func, Args&&... args)
+	Task(GenericTag, Func&& func, Args&&... args)
+		: executor{ std::make_shared< TaskExecutor< decltype( std::declval<Func>()( std::declval<Args>()... ) ) > >(
+			                                      std::forward<Func>(func),
+			                                      std::forward<Args>(args)... ) }
+		, context{ std::make_shared<GenericTaskContext>(executor) }
+	{}
+
+	template<class TEConcept>
+	Task(GenericTag, std::shared_ptr<TEConcept> te)
+		: executor( te )
+		, context( std::make_shared<GenericTaskContext>(executor) )
+	{}
+
+#ifdef AS_USE_COROUTINE_TASKS
+	// Explicity Coroutine
+	template<class Func, class... Args>
+	Task(CoroutineTag, Func&& func, Args&&... args)
 		: executor( std::make_shared< TaskExecutor< decltype( std::declval<Func>()( std::declval<Args>()... ) ) > >(
 			            std::forward<Func>(func),
 			            std::forward<Args>(args)... ) )
@@ -280,12 +303,12 @@ public:
 
 	template<class TEConcept,
 	         typename = typename std::enable_if<
-		         std::is_base_of< TaskExecutionConcept,
+		         std::is_base_of< TaskExecutorBase,
 		                          typename std::remove_reference<TEConcept>::type
 		                        >::value
 	                                           >::type
 	        >
-	Task(CoroutineTaskTag, std::shared_ptr<TEConcept> te)
+	Task(CoroutineTag, std::shared_ptr<TEConcept> te)
 		: executor( te )
 		, context( std::make_shared<CoroutineTaskContext>(executor) )
 	{}

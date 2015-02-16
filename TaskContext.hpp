@@ -3,14 +3,6 @@
 
 namespace as {
 
-struct TaskExecutionConcept
-{
-	virtual ~TaskExecutionConcept() {}
-
-	virtual void Run() = 0;
-	virtual bool IsFinished() const = 0;
-};
-
 class TaskContext
 {
 public:

@@ -1,4 +1,4 @@
-#include "Async.hpp"
+#include "Await.hpp"
 
 #include <iostream>
 #include <atomic>
@@ -97,13 +97,11 @@ void foo_test()
 
 	as::AsyncHandle<foo> handle{ result };
 
-	as::AsyncHandle<int> handle2{
-		as::async([]()
-		          {
-			          //std::this_thread::sleep_for( std::chrono::seconds(1) );
-			          return 42;
-		          } )
-			};
+	as::AsyncHandle<int> handle2 =
+		as::async([]() {
+				//std::this_thread::sleep_for( std::chrono::seconds(1) );
+				return 42;
+			} );
 
 	constexpr int THREAD_COUNT = 256;
 
@@ -161,59 +159,36 @@ void foo_test()
 
 void coro_test()
 {
-	as::Task t1(
-		[]() {
-			std::cout << "t1 started!\n";
-
-			as::ThisTask::Yield();
-
-			std::cout << "t1 finished!\n";
-		} );
-
-	as::Task c1{ as::CoroutineTaskTag{},
-		[]() {
-			std::cout << "c1 started!\n";
-
-			as::ThisTask::Yield();
-
-			std::cout << "c1 finished!\n";
-		}
-	};
-
-	as::Task c2{ as::CoroutineTaskTag{},
-		[t1]() mutable {
-			std::cout << "c2 started!\n";
-
-			t1.Invoke();
-
-			as::ThisTask::Yield();
-
-			std::cout << "c2 finished!\n";
-		}
-	};
-
-	as::Task c3{ as::CoroutineTaskTag{},
-		[t1]() mutable {
-
-			as::ThisTask::Yield();
-
-			t1.Invoke();
-
-			return 3.141526;
-		}
-	};
+#ifdef AS_USE_COROUTINE_TASKS
 
 	auto& ctxt = as::GlibExecutionContext::GetDefault();
-	ctxt.AddTask( c2 );
-	ctxt.AddTask( c3 );
 
-	ctxt.Iteration();
-	std::cout << "!!!!\n";
-	ctxt.Iteration();
-	std::cout << "!!!!\n";
-	ctxt.Iteration();
-	std::cout << "!!!!\n";
-	ctxt.Iteration();
+	auto mega_work_r =
+		as::async( ctxt, [&]() {
+				int x = 1000;
+				std::cout << "Doing mega work\n";
+				while( x-- ) {
+					std::cout << ".";
+					std::cout.flush();
+					std::this_thread::sleep_for( std::chrono::milliseconds(1) );
+					as::ThisTask::Yield();
+				}
+			} );
+
+	as::await( ctxt, [&]() {
+			std::cout << "Awaiting...!\n";
+			//as::ThisTask::Yield();
+
+			as::await( []() {
+					std::cout << "Start sleep...\n";
+					std::this_thread::sleep_for( std::chrono::seconds(5) );
+					std::cout << "Done!\n";
+			} );
+
+			std::cout << "Awaiting DONE...!\n";
+	} );
+
+#endif // AS_USE_COROUTINE_TASKS
 }
 
 
