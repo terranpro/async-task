@@ -97,28 +97,38 @@ CreateAsyncProxy( Obj *obj, Mutex& mut )
 }
 
 template<class T>
-struct AsyncHandle
+struct AsyncPtr
 {
+	struct AsyncPtrImpl
+	{
+		std::mutex mut;
+		std::unique_ptr<T> data;
+
+		AsyncPtrImpl()
+			: mut()
+			, data()
+		{}
+
+	};
+
 private:
-	std::shared_ptr< std::shared_ptr<T> > data;
-	std::shared_ptr<std::mutex> mut;
+	std::shared_ptr<AsyncPtrImpl> impl;
 	mutable TaskResult<T> result;
 
 public:
-	AsyncHandle( TaskResult<T> res )
-		: data( std::make_shared< std::shared_ptr<T> >() )
-		, mut( std::make_shared< std::mutex >() )
+	AsyncPtr( TaskResult<T> res )
+		: impl( std::make_shared<AsyncPtrImpl>() )
 		, result( std::move(res) )
 	{}
 
 	void Sync() const
 	{
-		std::lock_guard<std::mutex> lock{*mut};
+		std::lock_guard<std::mutex> lock{ impl->mut };
 
-		if ( *data )
+		if ( impl->data )
 			return;
 
-		*data = std::make_shared<T>( result.Get() );
+		impl->data.reset( new T( result.Get() ) );
 	}
 
 	// This is questionable in need/utility
@@ -130,36 +140,93 @@ public:
 	// read-only access; the first is also iffy for implicit conversions
 	operator const T&() const {
 		Sync();
-		return **data;
+		return *impl->data;
 	}
 
 	const T& operator*() const {
 		Sync();
-		return **data;
+		return *impl->data;
 	}
 
 	AsyncProxyObject<T> operator->() {
 		Sync();
-		return CreateAsyncProxy( &(**data), *mut );
+		return CreateAsyncProxy( &(*impl->data), impl->mut );
 	}
 
 	AsyncProxyObject<T> const operator->() const {
 		Sync();
-		return CreateAsyncProxy( &(**data), *mut );
+		return CreateAsyncProxy( &(*impl->data), impl->mut );
 	}
 
 	AsyncProxyObject<T> GetProxy() const
 	{
 		Sync();
-		return CreateAsyncProxy( &(**data), *mut );
+		return CreateAsyncProxy( &(*impl->data), impl->mut );
 	}
 
 	T& Direct() const {
 		Sync();
 
-		return **data;
+		return *impl->data;
 	}
 };
+
+template<class T, class... Args>
+T make_async_helper(Args... args)
+{
+	return T( std::forward<Args>(args)... );
+}
+
+template<class T, class... Args,
+         typename = typename std::enable_if<
+	         std::is_constructible<T, Args...>::value
+                                  >::type
+        >
+AsyncPtr<T> make_async(ExecutionContext& ctxt, Args&&... args)
+{
+	auto bndfunc = std::bind( make_async_helper<T, Args...>,
+	                          std::forward<Args>(args)... );
+	auto res = as::async( ctxt, std::move(bndfunc) );
+
+	return { res };
+}
+
+template<class T, class... Args,
+         typename = typename std::enable_if<
+	         std::is_constructible<T, Args...>::value
+                                           >::type
+        >
+AsyncPtr<T> make_async(Args&&... args)
+{
+	auto bndfunc = std::bind( make_async_helper<T, Args...>,
+	                          std::forward<Args>(args)... );
+	auto res = as::async( std::move(bndfunc) );
+
+	return { res };
+}
+
+template<class T, class Func, class... Args,
+         typename = typename std::enable_if<
+	         ! std::is_constructible<T, Func, Args...>::value
+                                  >::type
+        >
+AsyncPtr<T> make_async(ExecutionContext& ctxt, Func&& func, Args&&... args)
+{
+	return { as::async( ctxt,
+	                    std::forward<Func>(func),
+	                    std::forward<Args>(args)... ) };
+}
+
+template<class T, class Func, class... Args,
+         typename = typename std::enable_if<
+	         ! std::is_constructible<T, Func, Args...>::value
+                                  >::type
+        >
+AsyncPtr<T> make_async(Func&& func, Args&&... args)
+{
+	return { as::async( std::forward<Func>(func),
+	                    std::forward<Args>(args)... ) };
+}
 
 } // namespace as
 

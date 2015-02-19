@@ -87,7 +87,9 @@ struct TaskFinisher
 
 void foo_test()
 {
-	auto result = as::async([]() {
+	/* as::AsyncPtr<foo> handle */
+	auto handle = as::make_async<foo>(
+		[]() {
 			//std::this_thread::sleep_for( std::chrono::seconds(2) );
 
 			std::cout << "Get rekt, and Erekt plz.\n";
@@ -95,20 +97,17 @@ void foo_test()
 			return foo{31337};
 		} );
 
-	as::AsyncHandle<foo> handle{ result };
+	// alternate syntax
+	//as::AsyncPtr<foo> handle = as::make_async<foo>( 31337 );
 
-	as::AsyncHandle<int> handle2 =
-		as::async([]() {
-				//std::this_thread::sleep_for( std::chrono::seconds(1) );
-				return 42;
-			} );
+	as::AsyncPtr<int> handle2{ as::make_async<int>( 42 ) };
 
 	constexpr int THREAD_COUNT = 256;
 
 	decltype( std::chrono::high_resolution_clock::now() - std::chrono::high_resolution_clock::now() )
 		clock_dur{};
 
-	result.Get();
+	//result.Get();
 
 	std::vector< TaskFinisher< decltype(clock_dur) > > finishers;
 
@@ -138,7 +137,7 @@ void foo_test()
 		*proxy = 96;
 	}
 
-	int xyz = handle2;
+	auto xyz = handle2;
 
 	assert( handle );
 	assert( handle2 );
@@ -150,9 +149,9 @@ void foo_test()
 	std::cout << "foo cons: " << foo::obj_cons << "\n";
 	std::cout << "foo copy: " << foo::obj_copy << "\n";
 
-	auto dur_ms = std::chrono::duration_cast<std::chrono::microseconds>(clock_dur);
+	auto dur_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_dur);
 
-	std::cout << "Clock duration: " << dur_ms.count() << "\n";
+	std::cout << "Clock duration: " << dur_ns.count() << "\n";
 
 	finishers.clear();
 }
@@ -189,6 +188,8 @@ void coro_test()
 	} );
 
 #endif // AS_USE_COROUTINE_TASKS
+
+
 }
 
 

@@ -13,9 +13,11 @@ void await_schedule(ExecutionContext& context, Task task, TaskResult<Result> res
 
 	while( !task.IsFinished() ) {
 
+#ifdef AS_USE_COROUTINE_TASKS
 		if ( detail::this_task_stack.size() ) {
 			detail::this_task_stack[0]->Yield();
 		}
+#endif // AS_USE_COROUTINE_TASKS
 
 		if ( context.IsCurrent() )
 			context.Iteration();
