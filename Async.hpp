@@ -1,7 +1,7 @@
 #ifndef AS_ASYNC_HPP
 #define AS_ASYNC_HPP
 
-#include "GlibExecutionContext.hpp"
+#include "GlibExecutor.hpp"
 
 #include <atomic>
 #include <mutex>
@@ -27,13 +27,13 @@ make_task_pair(TaskTag, Func&& func, Args&&... args)
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext
 template<class Func, class... Args>
 TaskResult< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
-async(ExecutionContext& context, Func&& func, Args&&... args)
+async(Executor& context, Func&& func, Args&&... args)
 {
 	auto tr_pair = make_task_pair( Task::GenericTag{},
 	                               std::forward<Func>(func),
 	                               std::forward<Args>(args)... );
 
-	context.AddTask( tr_pair.first );
+	context.Schedule( tr_pair.first );
 
 	return tr_pair.second;
 }
@@ -41,7 +41,7 @@ async(ExecutionContext& context, Func&& func, Args&&... args)
 /// Dispatch a callback in thread; overload for shared_ptr context
 template<class Func, class... Args>
 TaskResult< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
-async(std::shared_ptr<ExecutionContext> context, Func&& func, Args&&... args)
+async(std::shared_ptr<Executor> context, Func&& func, Args&&... args)
 {
 	return async( *context, std::forward<Func>(func), std::forward<Args>(args)... );
 }
@@ -51,7 +51,7 @@ template<class Func, class... Args>
 TaskResult< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
 async(Func&& func, Args&&... args)
 {
-	GlibExecutionContext c;
+	GlibExecutor c;
 
 	return async( c,
 	              std::forward<Func>(func),
@@ -184,7 +184,7 @@ template<class T, class... Args,
 	         std::is_constructible<T, Args...>::value
                                   >::type
         >
-AsyncPtr<T> make_async(ExecutionContext& ctxt, Args&&... args)
+AsyncPtr<T> make_async(Executor& ctxt, Args&&... args)
 {
 	auto bndfunc = std::bind( make_async_helper<T, Args...>,
 	                          std::forward<Args>(args)... );
@@ -213,7 +213,7 @@ template<class T, class Func, class... Args,
 	         ! std::is_constructible<T, Func, Args...>::value
                                   >::type
         >
-AsyncPtr<T> make_async(ExecutionContext& ctxt, Func&& func, Args&&... args)
+AsyncPtr<T> make_async(Executor& ctxt, Func&& func, Args&&... args)
 {
 	return { as::async( ctxt,
 	                    std::forward<Func>(func),

@@ -1,7 +1,7 @@
-#ifndef AS_GLIB_EXECUTION_CONTEXT_HPP
-#define AS_GLIB_EXECUTION_CONTEXT_HPP
+#ifndef AS_GLIB_EXECUTOR_HPP
+#define AS_GLIB_EXECUTOR_HPP
 
-#include "ExecutionContext.hpp"
+#include "Executor.hpp"
 
 #include <map>
 #include <vector>
@@ -21,7 +21,7 @@ struct GlibThread
 		: context_thread()
 		, loop( l ) // assume control of pointer, do not ref here
 	{
-		context_thread = g_thread_new( "GlibExecutionContext",
+		context_thread = g_thread_new( "GlibExecutor",
 		                               &GlibThread::ThreadEntryPoint,
 		                               g_main_loop_ref(loop) );
 	}
@@ -108,24 +108,24 @@ private:
 	}
 };
 
-struct GlibExecutionContextImpl
+struct GlibExecutorImpl
 {
 	typedef Task TaskPair;
 
 	GMainContext *context;
 	GlibThread gthread;
 
-	GlibExecutionContextImpl()
+	GlibExecutorImpl()
 		: context( g_main_context_new() )
 		, gthread( g_main_loop_new( context, FALSE ) )
 	{}
 
-	GlibExecutionContextImpl(GMainContext *ctxt)
+	GlibExecutorImpl(GMainContext *ctxt)
 		: context( g_main_context_ref(ctxt) )
 		, gthread( g_thread_self() )
 	{}
 
-	~GlibExecutionContextImpl()
+	~GlibExecutorImpl()
 	{
 		if ( context )
 			g_main_context_unref( context );
@@ -214,68 +214,68 @@ private:
 
 // Public Interface Definition
 
-class GlibExecutionContext
-	: public ExecutionContext
+class GlibExecutor
+	: public Executor
 {
-	std::unique_ptr<GlibExecutionContextImpl> impl;
+	std::unique_ptr<GlibExecutorImpl> impl;
 
-	GlibExecutionContext(void *context);
-
-public:
-	static GlibExecutionContext& GetDefault();
+	GlibExecutor(void *context);
 
 public:
-	GlibExecutionContext();
-	~GlibExecutionContext();
+	static GlibExecutor& GetDefault();
 
-	void AddTask(Task task);
-	void AddTimedTask(Task task, std::chrono::milliseconds time_ms);
+public:
+	GlibExecutor();
+	~GlibExecutor();
+
+	void Schedule(Task task);
+	void ScheduleAfter(Task task, std::chrono::milliseconds time_ms);
 
 	void Iteration();
 	bool IsCurrent();
 };
 
 //private:
-GlibExecutionContext::GlibExecutionContext(void *context)
-	: impl( new GlibExecutionContextImpl( static_cast<GMainContext *>(context) ) )
+GlibExecutor::GlibExecutor(void *context)
+	: impl( new GlibExecutorImpl( static_cast<GMainContext *>(context) ) )
 {}
 
 //public:
-GlibExecutionContext::GlibExecutionContext()
-	: impl( new GlibExecutionContextImpl )
+GlibExecutor::GlibExecutor()
+	: impl( new GlibExecutorImpl )
 {}
 
-GlibExecutionContext::~GlibExecutionContext() = default;
+GlibExecutor::~GlibExecutor() = default;
 
 // static - get default main context
-GlibExecutionContext& GlibExecutionContext::GetDefault()
+GlibExecutor& GlibExecutor::GetDefault()
 {
 	// Default Main Context initialization
-	static GlibExecutionContext main_context{ g_main_context_default() };
+	static GlibExecutor main_context{ g_main_context_default() };
 
 	return main_context;
 }
 
-void GlibExecutionContext::AddTimedTask(Task task, std::chrono::milliseconds time_ms)
-{
-	impl->AddTimedTask( task, time_ms );
-}
-
-void GlibExecutionContext::AddTask(Task task)
+void GlibExecutor::Schedule(Task task)
 {
 	impl->AddTask( task );
 }
 
-void GlibExecutionContext::Iteration()
+void GlibExecutor::ScheduleAfter(Task task, std::chrono::milliseconds time_ms)
+{
+	impl->AddTimedTask( task, time_ms );
+}
+
+void GlibExecutor::Iteration()
 {
 	impl->Iteration();
 }
 
-bool GlibExecutionContext::IsCurrent()
+bool GlibExecutor::IsCurrent()
 {
 	return impl->IsCurrent();
 }
 
 } // namespace as
 
-#endif // AS_GLIB_EXECUTION_CONTEXT_HPP
+#endif // AS_GLIB_EXECUTOR_HPP

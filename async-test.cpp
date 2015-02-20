@@ -1,4 +1,5 @@
 #include "Await.hpp"
+#include "ThreadExecutor.hpp"
 
 #include <iostream>
 #include <atomic>
@@ -160,7 +161,7 @@ void coro_test()
 {
 #ifdef AS_USE_COROUTINE_TASKS
 
-	auto& ctxt = as::GlibExecutionContext::GetDefault();
+	auto& ctxt = as::GlibExecutor::GetDefault();
 
 	auto mega_work_r =
 		as::async( ctxt, [&]() {
@@ -191,11 +192,32 @@ void coro_test()
 #endif // AS_USE_COROUTINE_TASKS
 }
 
+void thread_executor_test()
+{
+	as::ThreadExecutor exec;
+
+	exec.ScheduleAfter( [&]() {
+			std::cout << "Get Rekt forever.\n";
+			exec.ScheduleAfter( [&]() {
+					std::cout << "First!\n";
+					exec.ScheduleAfter( []() {
+							std::cout << "Inner!\n";
+						}, std::chrono::seconds(1) );
+
+				}, std::chrono::seconds(1) );
+
+		}, std::chrono::seconds(2) );
+
+	std::this_thread::sleep_for( std::chrono::seconds(5) );
+}
+
 int main(int argc, char *argv[])
 {
 	foo_test();
 
 	coro_test();
+
+	thread_executor_test();
 
 	return 0;
 }

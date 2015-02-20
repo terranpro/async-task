@@ -2,14 +2,14 @@
 #define AS_AWAIT_HPP
 
 #include "Async.hpp"
-#include "ExecutionContext.hpp"
+#include "Executor.hpp"
 
 namespace as {
 
 template<class Result>
-void await_schedule(ExecutionContext& context, Task task, TaskResult<Result> result)
+void await_schedule(Executor& context, Task task, TaskResult<Result> result)
 {
-	context.AddTask(task);
+	context.Schedule(task);
 
 	while( !task.IsFinished() ) {
 
@@ -27,7 +27,7 @@ void await_schedule(ExecutionContext& context, Task task, TaskResult<Result> res
 
 template<class Func, class... Args>
 decltype( std::declval<Func>()(std::declval<Args>()...) )
-await(ExecutionContext& context, Func&& func, Args&&... args)
+await(Executor& context, Func&& func, Args&&... args)
 {
 	auto tr_pair = as::make_task_pair( Task::CoroutineTag{},
 	                                   std::forward<Func>(func),
@@ -44,7 +44,7 @@ template<class Func, class... Args>
 decltype( std::declval<Func>()(std::declval<Args>()...) )
 await(Func&& func, Args&&... args)
 {
-	GlibExecutionContext ctxt;
+	GlibExecutor ctxt;
 
 	return await( ctxt,
 	              std::forward<Func>(func),
