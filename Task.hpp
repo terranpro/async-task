@@ -200,38 +200,38 @@ private:
 };
 
 template<class Func, class... Args>
-std::shared_ptr< TaskFunction<decltype( std::declval<Func>()( std::declval<Args>()... ) )> >
+std::unique_ptr< TaskFunction<decltype( std::declval<Func>()( std::declval<Args>()... ) )> >
 make_task_function(Func&& func, Args&&... args)
 {
 	typedef decltype( std::declval<Func>()( std::declval<Args>()... ) )
 		result_type;
 
-	return std::make_shared< TaskFunction< result_type > >(
-		std::forward<Func>(func),
-		std::forward<Args>(args)... );
+	std::unique_ptr<TaskFunction<result_type> > taskfunc{ new TaskFunction< result_type >(
+			std::forward<Func>(func),
+			std::forward<Args>(args)... ) };
+
+	return taskfunc;
 }
 
 class Task
 {
 private:
 	class GenericTaskContext
-		: public TaskContext
+		: public TaskContextBase
 	{
-		std::shared_ptr<TaskFunctionBase> taskexec;
-
 	public:
 		GenericTaskContext()
-			: taskexec()
+			: TaskContextBase( nullptr )
 		{}
 
-		GenericTaskContext(std::shared_ptr<TaskFunctionBase> te)
-			: taskexec( te )
+		GenericTaskContext(std::unique_ptr<TaskFunctionBase> te)
+			: TaskContextBase( std::move(te) )
 		{}
 
 		void Invoke()
 		{
-			if (taskexec)
-				taskexec->Run();
+			if (taskfunc)
+				taskfunc->Run();
 		}
 
 		void Yield()
@@ -241,8 +241,7 @@ private:
 	};
 
 private:
-	std::shared_ptr<TaskFunctionBase> function;
-	std::shared_ptr<TaskContext> context;
+	std::shared_ptr<TaskContextBase> context;
 
 public:
 	struct GenericTag {};
@@ -261,54 +260,51 @@ public:
 	                                           >::type >
 
 	Task(Func&& func, Args&&... args)
-		: function{ make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) }
-		, context{ std::make_shared<GenericTaskContext>(function) }
+		: context{ std::make_shared<GenericTaskContext>(
+			         make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) }
 	{}
 
-	template<class TEConcept,
+	template<class TFunc,
 	         typename = typename std::enable_if<
 		         std::is_base_of< TaskFunctionBase,
-		                          typename std::remove_reference<TEConcept>::type
+		                          typename std::remove_reference<TFunc>::type
 		                        >::value
 	                                           >::type
 	        >
-	Task(std::shared_ptr<TEConcept> te)
-		: function( te )
-		, context( std::make_shared<GenericTaskContext>(function) )
+	Task(std::unique_ptr<TFunc> tf)
+		: context( std::make_shared<GenericTaskContext>(std::move(tf)) )
 	{}
 
 	// Explicitly Generic
 	template<class Func, class... Args>
 	Task(GenericTag, Func&& func, Args&&... args)
-		: function{ make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) }
-		, context{ std::make_shared<GenericTaskContext>(function) }
+		: context{ std::make_shared<GenericTaskContext>(
+			make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) }
 	{}
 
-	template<class TEConcept>
-	Task(GenericTag, std::shared_ptr<TEConcept> te)
-		: function( te )
-		, context( std::make_shared<GenericTaskContext>(function) )
+	template<class TFunc>
+	Task(GenericTag, std::unique_ptr<TFunc> tf)
+		: context( std::make_shared<GenericTaskContext>( std::move(tf) ) )
 	{}
 
 #ifdef AS_USE_COROUTINE_TASKS
 	// Explicity Coroutine
 	template<class Func, class... Args>
 	Task(CoroutineTag, Func&& func, Args&&... args)
-		: function( make_function(std::forward<Func>(func), std::forward<Args>(args)...) )
-		, context( std::make_shared<CoroutineTaskContext>(function) )
+		: context( std::make_shared<CoroutineTaskContext>(
+			           make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) )
 	{}
 
 
-	template<class TEConcept,
+	template<class TFunc,
 	         typename = typename std::enable_if<
 		         std::is_base_of< TaskFunctionBase,
-		                          typename std::remove_reference<TEConcept>::type
+		                          typename std::remove_reference<TFunc>::type
 		                        >::value
 	                                           >::type
 	        >
-	Task(CoroutineTag, std::shared_ptr<TEConcept> te)
-		: function( te )
-		, context( std::make_shared<CoroutineTaskContext>(function) )
+	Task(CoroutineTag, std::unique_ptr<TFunc> tf)
+		: context( std::make_shared<CoroutineTaskContext>( std::move(tf) ) )
 	{}
 #endif // AS_USE_COROUTINE_TASKS
 
@@ -332,7 +328,7 @@ public:
 
 	bool IsFinished() const
 	{
-		return function->IsFinished();
+		return context->IsFinished();
 	}
 };
 

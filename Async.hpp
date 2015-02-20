@@ -17,10 +17,11 @@ std::pair<
         >
 make_task_pair(TaskTag, Func&& func, Args&&... args)
 {
-	auto te = make_task_function( std::forward<Func>(func),
+	auto tf = make_task_function( std::forward<Func>(func),
 	                              std::forward<Args>(args)... );
+	auto result = tf->GetResult();
 
-	return std::make_pair( Task{ TaskTag{}, te }, te->GetResult() );
+	return std::make_pair( Task{ TaskTag{}, std::move(tf) }, result );
 }
 
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext
@@ -169,12 +170,15 @@ public:
 	}
 };
 
+// Assist with construction (args are copied, not forwarded, to be
+// compatible with std::bind()'s decay copy)
 template<class T, class... Args>
 T make_async_helper(Args... args)
 {
 	return T( std::forward<Args>(args)... );
 }
 
+// Construction done using constructor directly
 template<class T, class... Args,
          typename = typename std::enable_if<
 	         std::is_constructible<T, Args...>::value
@@ -203,6 +207,7 @@ AsyncPtr<T> make_async(Args&&... args)
 	return { res };
 }
 
+// Construction done via callable expression return result
 template<class T, class Func, class... Args,
          typename = typename std::enable_if<
 	         ! std::is_constructible<T, Func, Args...>::value
