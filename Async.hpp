@@ -17,10 +17,8 @@ std::pair<
         >
 make_task_pair(TaskTag, Func&& func, Args&&... args)
 {
-	auto te =
-		std::make_shared< TaskExecutor< decltype( std::declval<Func>()(std::declval<Args>()...) ) > >(
-			std::forward<Func>(func),
-			std::forward<Args>(args)... );
+	auto te = make_task_function( std::forward<Func>(func),
+	                              std::forward<Args>(args)... );
 
 	return std::make_pair( Task{ TaskTag{}, te }, te->GetResult() );
 }

@@ -10,7 +10,7 @@
 //#undef AS_USE_COROUTINE_TASKS
 
 #include "TaskContext.hpp"
-#include "TaskExecutor.hpp"
+#include "TaskFunction.hpp"
 
 #ifdef AS_USE_COROUTINE_TASKS
 #include "CoroutineTaskContext.hpp"
@@ -24,12 +24,6 @@ struct TaskResultControlBlock
 	std::unique_ptr<T> result;
 	std::promise<T&> result_promise;
 	std::shared_future<T&> result_future{ result_promise.get_future() };
-
-	template<class... Args>
-	void Set(Args&&... args)
-	{
-		result_promise.set_value( std::forward<Args>(args)... );
-	}
 };
 
 template<>
@@ -37,12 +31,6 @@ struct TaskResultControlBlock<void>
 {
 	std::promise<void> result_promise;
 	std::shared_future<void> result_future{ result_promise.get_future() };
-
-	template<class... Args>
-	void Set(Args&&... args)
-	{
-		result_promise.set_value();
-	}
 };
 
 template<class T>
@@ -50,7 +38,7 @@ class TaskResult
 {
 	std::shared_ptr< TaskResultControlBlock<T> > ctrl;
 
-	template<class U> friend struct TaskExecutor;
+	template<class U> friend struct TaskFunction;
 
 private:
 	TaskResult( std::shared_ptr<TaskResultControlBlock<T> > ctrl)
@@ -97,7 +85,7 @@ class TaskResult<void>
 {
 	std::shared_ptr< TaskResultControlBlock<void> > ctrl;
 
-	template<class U> friend struct TaskExecutor;
+	template<class U> friend struct TaskFunction;
 
 private:
 	TaskResult(std::shared_ptr< TaskResultControlBlock<void> > ctrl)
@@ -117,14 +105,23 @@ public:
 };
 
 template<class Ret>
-struct TaskExecutor
-	: public TaskExecutorBase
+struct TaskInvokerRun
+{
+	void operator()(TaskResultControlBlock<Ret>& ctrl)
+	{
+
+	}
+};
+
+template<class Ret>
+struct TaskFunction
+	: public TaskFunctionBase
 {
 	std::shared_ptr< TaskResultControlBlock<Ret> > ctrl;
 	std::function<Ret()> task_func;
 
 	template<class Func, class... Args>
-	TaskExecutor( Func&& func, Args&&... args )
+	TaskFunction( Func&& func, Args&&... args )
 		: ctrl( CreateControlBlock() )
 		, task_func( std::bind(std::forward<Func>(func), std::forward<Args>(args)... ) )
 	{}
@@ -134,7 +131,7 @@ struct TaskExecutor
 		if ( !ctrl )
 			ctrl = CreateControlBlock();
 
-		ctrl->result.reset( new Ret{ std::move( task_func() ) } );
+		ctrl->result.reset( new Ret{ task_func() } );
 
 		ctrl->result_promise.set_value( *ctrl->result );
 
@@ -147,26 +144,27 @@ struct TaskExecutor
 		return !ctrl;
 	}
 
-	std::shared_ptr< TaskResultControlBlock<Ret> > CreateControlBlock() const
-	{
-		return std::make_shared< TaskResultControlBlock<Ret> >();
-	}
-
 	TaskResult<Ret> GetResult()
 	{
 		return { ctrl };
 	}
+
+private:
+	std::shared_ptr< TaskResultControlBlock<Ret> > CreateControlBlock() const
+	{
+		return std::make_shared< TaskResultControlBlock<Ret> >();
+	}
 };
 
 template<>
-struct TaskExecutor<void>
-	: public TaskExecutorBase
+struct TaskFunction<void>
+	: public TaskFunctionBase
 {
 	std::shared_ptr< TaskResultControlBlock<void> > ctrl;
 	std::function<void()> task_func;
 
 	template<class Func, class... Args>
-	TaskExecutor( Func&& func, Args&&... args )
+	TaskFunction( Func&& func, Args&&... args )
 		: ctrl( CreateControlBlock() )
 		, task_func( std::bind( std::forward<Func>(func), std::forward<Args>(args)... ) )
 	{}
@@ -189,22 +187,26 @@ struct TaskExecutor<void>
 		return !ctrl;
 	}
 
-	std::shared_ptr< TaskResultControlBlock<void> > CreateControlBlock() const
-	{
-		return std::make_shared< TaskResultControlBlock<void> >();
-	}
-
 	TaskResult<void> GetResult()
 	{
 		return { ctrl };
 	}
+
+private:
+	std::shared_ptr< TaskResultControlBlock<void> > CreateControlBlock() const
+	{
+		return std::make_shared< TaskResultControlBlock<void> >();
+	}
 };
 
 template<class Func, class... Args>
-std::shared_ptr< TaskExecutorBase >
-make_executor(Func&& func, Args&&... args)
+std::shared_ptr< TaskFunction<decltype( std::declval<Func>()( std::declval<Args>()... ) )> >
+make_task_function(Func&& func, Args&&... args)
 {
-	return std::make_shared< TaskExecutor< decltype( std::declval<Func>()( std::declval<Args>()... ) ) > >(
+	typedef decltype( std::declval<Func>()( std::declval<Args>()... ) )
+		result_type;
+
+	return std::make_shared< TaskFunction< result_type > >(
 		std::forward<Func>(func),
 		std::forward<Args>(args)... );
 }
@@ -215,14 +217,14 @@ private:
 	class GenericTaskContext
 		: public TaskContext
 	{
-		std::shared_ptr<TaskExecutorBase> taskexec;
+		std::shared_ptr<TaskFunctionBase> taskexec;
 
 	public:
 		GenericTaskContext()
 			: taskexec()
 		{}
 
-		GenericTaskContext(std::shared_ptr<TaskExecutorBase> te)
+		GenericTaskContext(std::shared_ptr<TaskFunctionBase> te)
 			: taskexec( te )
 		{}
 
@@ -239,7 +241,7 @@ private:
 	};
 
 private:
-	std::shared_ptr<TaskExecutorBase> executor;
+	std::shared_ptr<TaskFunctionBase> function;
 	std::shared_ptr<TaskContext> context;
 
 public:
@@ -254,63 +256,59 @@ public:
 	         typename = typename std::enable_if<
 		         !std::is_base_of< typename std::remove_reference<Func>::type, Task >::value &&
 		         !std::is_same< typename std::remove_reference<Func>::type,
-		                        std::shared_ptr<TaskExecutorBase>
+		                        std::shared_ptr<TaskFunctionBase>
 		                         >::value
 	                                           >::type >
 
 	Task(Func&& func, Args&&... args)
-		: executor{ make_executor(std::forward<Func>(func), std::forward<Args>(args)...) }
-		, context{ std::make_shared<GenericTaskContext>(executor) }
+		: function{ make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) }
+		, context{ std::make_shared<GenericTaskContext>(function) }
 	{}
 
 	template<class TEConcept,
 	         typename = typename std::enable_if<
-		         std::is_base_of< TaskExecutorBase,
+		         std::is_base_of< TaskFunctionBase,
 		                          typename std::remove_reference<TEConcept>::type
 		                        >::value
 	                                           >::type
 	        >
 	Task(std::shared_ptr<TEConcept> te)
-		: executor( te )
-		, context( std::make_shared<GenericTaskContext>(executor) )
+		: function( te )
+		, context( std::make_shared<GenericTaskContext>(function) )
 	{}
 
 	// Explicitly Generic
 	template<class Func, class... Args>
 	Task(GenericTag, Func&& func, Args&&... args)
-		: executor{ std::make_shared< TaskExecutor< decltype( std::declval<Func>()( std::declval<Args>()... ) ) > >(
-			                                      std::forward<Func>(func),
-			                                      std::forward<Args>(args)... ) }
-		, context{ std::make_shared<GenericTaskContext>(executor) }
+		: function{ make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) }
+		, context{ std::make_shared<GenericTaskContext>(function) }
 	{}
 
 	template<class TEConcept>
 	Task(GenericTag, std::shared_ptr<TEConcept> te)
-		: executor( te )
-		, context( std::make_shared<GenericTaskContext>(executor) )
+		: function( te )
+		, context( std::make_shared<GenericTaskContext>(function) )
 	{}
 
 #ifdef AS_USE_COROUTINE_TASKS
 	// Explicity Coroutine
 	template<class Func, class... Args>
 	Task(CoroutineTag, Func&& func, Args&&... args)
-		: executor( std::make_shared< TaskExecutor< decltype( std::declval<Func>()( std::declval<Args>()... ) ) > >(
-			            std::forward<Func>(func),
-			            std::forward<Args>(args)... ) )
-		, context( std::make_shared<CoroutineTaskContext>(executor) )
+		: function( make_function(std::forward<Func>(func), std::forward<Args>(args)...) )
+		, context( std::make_shared<CoroutineTaskContext>(function) )
 	{}
 
 
 	template<class TEConcept,
 	         typename = typename std::enable_if<
-		         std::is_base_of< TaskExecutorBase,
+		         std::is_base_of< TaskFunctionBase,
 		                          typename std::remove_reference<TEConcept>::type
 		                        >::value
 	                                           >::type
 	        >
 	Task(CoroutineTag, std::shared_ptr<TEConcept> te)
-		: executor( te )
-		, context( std::make_shared<CoroutineTaskContext>(executor) )
+		: function( te )
+		, context( std::make_shared<CoroutineTaskContext>(function) )
 	{}
 #endif // AS_USE_COROUTINE_TASKS
 
@@ -319,6 +317,7 @@ public:
 	Task(Task&&) = default;
 	Task(Task const&) = default;
 
+	Task& operator=(Task&&) = default;
 	Task& operator=(Task const&) = default;
 
 	void Invoke()
@@ -333,7 +332,7 @@ public:
 
 	bool IsFinished() const
 	{
-		return executor->IsFinished();
+		return function->IsFinished();
 	}
 };
 

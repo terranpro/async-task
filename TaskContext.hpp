@@ -1,6 +1,8 @@
 #ifndef AS_TASK_CONTEXT_HPP
 #define AS_TASK_CONTEXT_HPP
 
+#include "TaskFunction.hpp"
+
 namespace as {
 
 class TaskContext

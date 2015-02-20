@@ -164,7 +164,7 @@ void coro_test()
 
 	auto mega_work_r =
 		as::async( ctxt, [&]() {
-				int x = 1000;
+				int x = 50;
 				std::cout << "Doing mega work\n";
 				while( x-- ) {
 					std::cout << ".";
@@ -176,7 +176,8 @@ void coro_test()
 
 	as::await( ctxt, [&]() {
 			std::cout << "Awaiting...!\n";
-			//as::ThisTask::Yield();
+
+			as::ThisTask::Yield();
 
 			as::await( []() {
 					std::cout << "Start sleep...\n";
@@ -188,10 +189,7 @@ void coro_test()
 	} );
 
 #endif // AS_USE_COROUTINE_TASKS
-
-
 }
-
 
 int main(int argc, char *argv[])
 {

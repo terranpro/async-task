@@ -193,7 +193,7 @@ class CoroutineTaskContext
 	std::size_t stack_size;
 	void *stack;
 	v2::BoostContext bctxt;
-	std::shared_ptr<TaskExecutorBase> taskexec;
+	std::shared_ptr<TaskFunctionBase> taskfunc;
 
 private:
 	void deinitialize_context()
@@ -215,8 +215,8 @@ private:
 
 	void on_entry()
 	{
-		if (taskexec)
-			taskexec->Run();
+		if (taskfunc)
+			taskfunc->Run();
 	}
 
 public:
@@ -226,18 +226,18 @@ public:
 		, stack( alloc.allocate( stack_size ) )
 		, bctxt( &CoroutineTaskContext::entry_point,
 		         reinterpret_cast<intptr_t>(this) )
-		, taskexec()
+		, taskfunc()
 	{
 		bctxt.Init( stack, stack_size );
 	}
 
-	CoroutineTaskContext(std::shared_ptr<TaskExecutorBase> te)
+	CoroutineTaskContext(std::shared_ptr<TaskFunctionBase> te)
 		: alloc()
 		, stack_size( stack_allocator::default_stacksize() )
 		, stack( alloc.allocate( stack_size ) )
 		, bctxt( &CoroutineTaskContext::entry_point,
 		         reinterpret_cast<intptr_t>(this) )
-		, taskexec( te )
+		, taskfunc( te )
 	{
 		bctxt.Init( stack, stack_size );
 	}
