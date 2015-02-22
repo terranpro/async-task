@@ -53,11 +53,6 @@ public:
 	};
 
 public:
-	TaskResult()
-		: ctrl()
-	{}
-
-public:
 	T& Get()
 	{
 		return ctrl->result_future.get();
@@ -65,7 +60,7 @@ public:
 
 	bool Valid() const
 	{
-		return ctrl->result_future.valid();
+		return ctrl && ctrl->result_future.valid();
 	}
 
 	void Wait() const
@@ -100,16 +95,12 @@ public:
 
 	bool Valid()
 	{
-		return ctrl->result_future.valid();
+		return ctrl && ctrl->result_future.valid();
 	}
-};
 
-template<class Ret>
-struct TaskInvokerRun
-{
-	void operator()(TaskResultControlBlock<Ret>& ctrl)
+	void Wait() const
 	{
-
+		return ctrl->result_future.wait();
 	}
 };
 

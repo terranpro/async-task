@@ -22,7 +22,6 @@ struct foo
 		, users{0}
 	{
 		++obj_cons;
-		std::cout << "GetRekt and Erekt.\n";
 	}
 
 	foo(foo const& other)
@@ -30,12 +29,6 @@ struct foo
 		, users(0)
 	{
 		++obj_copy;
-		std::cout << "other x: " << x << "\n";
-	}
-
-	~foo()
-	{
-		std::cout << "x: " << x << "\n";
 	}
 
 	void inc()
@@ -77,25 +70,29 @@ struct TaskFinisher
 	TaskFinisher(as::TaskResult<T> result)
 		: result(result)
 	{}
-	// TaskFinisher(as::TaskResult<T>&& result)
-	// 	: result(std::move(result))
-	// {}
+
+	TaskFinisher(as::TaskResult<T>&& result)
+		: result( std::move(result) )
+	{}
+
+	TaskFinisher(const TaskFinisher&) = default;
+	TaskFinisher(TaskFinisher&&) = default;
+
 	~TaskFinisher()
 	{
-		result.Get();
+		if (result.Valid())
+			result.Get();
 	}
 };
 
 void foo_test()
 {
+	const int init_val = 31337;
+
 	/* as::AsyncPtr<foo> handle */
 	auto handle = as::make_async<foo>(
-		[]() {
-			//std::this_thread::sleep_for( std::chrono::seconds(2) );
-
-			std::cout << "Get rekt, and Erekt plz.\n";
-
-			return foo{31337};
+		[init_val]() {
+			return foo{init_val};
 		} );
 
 	// alternate syntax
@@ -108,14 +105,14 @@ void foo_test()
 	decltype( std::chrono::high_resolution_clock::now() - std::chrono::high_resolution_clock::now() )
 		clock_dur{};
 
-	//result.Get();
-
 	std::vector< TaskFinisher< decltype(clock_dur) > > finishers;
+
+	// Force initialization to finish, so we measure only access overhead
+	handle.Sync();
 
 	for ( int t = 0; t < THREAD_COUNT; ++t ) {
 
 		auto r = as::async( [=]() mutable {
-				//std::this_thread::sleep_for( std::chrono::microseconds(100) );
 
 				auto beg = std::chrono::high_resolution_clock::now();
 				handle->inc();
@@ -143,9 +140,9 @@ void foo_test()
 	assert( handle );
 	assert( handle2 );
 
-	std::cout << "Handle value: " << handle << "\n";
-	std::cout << "Handle<int> value: " << *handle2 << "\n";
-	std::cout << "xyz value: " << xyz << "\n";
+	assert( handle->x == init_val + THREAD_COUNT );
+	assert( *handle2 == 96 );
+	assert( *handle2 == xyz );
 
 	std::cout << "foo cons: " << foo::obj_cons << "\n";
 	std::cout << "foo copy: " << foo::obj_copy << "\n";
@@ -197,7 +194,7 @@ void thread_executor_test()
 	as::ThreadExecutor exec;
 
 	exec.ScheduleAfter( [&]() {
-			std::cout << "Get Rekt forever.\n";
+			std::cout << "Amazing forever.\n";
 			exec.ScheduleAfter( [&]() {
 					std::cout << "First!\n";
 					exec.ScheduleAfter( []() {
