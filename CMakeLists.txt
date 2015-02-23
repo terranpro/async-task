@@ -6,21 +6,12 @@ pkg_check_modules( pkg-glib REQUIRED
   "glib-2.0"
   )
 
-ADD_EXECUTABLE(async-test
-  async-test.cpp
+INCLUDE_DIRECTORIES(
+  ${CMAKE_SOURCE_DIR}/async-task
   )
 
 STRING(REPLACE ";" " " glib_CFLAGS_STR "${pkg-glib_CFLAGS}")
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 ${glib_CFLAGS_STR}")
 
-IF( CMAKE_ASYNC_COROUTINES )
-  ADD_DEFINITIONS(-DAS_USE_COROUTINE_TASKS)
-  TARGET_LINK_LIBRARIES( async-test
-    boost_context
-    )
-ENDIF()
-
-TARGET_LINK_LIBRARIES( async-test
-  ${pkg-glib_LIBRARIES}
-  )
+ADD_SUBDIRECTORY(test)
