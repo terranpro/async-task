@@ -1,3 +1,13 @@
+//
+//  bind.hpp - binds function objects to arguments
+//
+//  Copyright (c) 2015 Brian Fransioli
+//
+//  Distributed under the Boost Software License, Version 1.0.
+//  See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt
+//
+
 #ifndef AS_TASK_HPP
 #define AS_TASK_HPP
 
@@ -23,14 +33,25 @@ struct TaskResultControlBlock
 {
 	std::unique_ptr<T> result;
 	std::promise<T&> result_promise;
-	std::shared_future<T&> result_future{ result_promise.get_future() };
+	std::shared_future<T&> result_future;
+
+	TaskResultControlBlock()
+		: result()
+		, result_promise()
+		, result_future( result_promise.get_future() )
+	{}
 };
 
 template<>
 struct TaskResultControlBlock<void>
 {
 	std::promise<void> result_promise;
-	std::shared_future<void> result_future{ result_promise.get_future() };
+	std::shared_future<void> result_future;
+
+	TaskResultControlBlock()
+		: result_promise()
+		, result_future( result_promise.get_future() )
+	{}
 };
 
 template<class T>
@@ -53,6 +74,8 @@ public:
 	};
 
 public:
+	TaskResult() = default;
+
 	T& Get()
 	{
 		return ctrl->result_future.get();
@@ -88,6 +111,8 @@ private:
 	{}
 
 public:
+	TaskResult() = default;
+
 	void Get()
 	{
 		ctrl->result_future.get();

@@ -1,3 +1,13 @@
+//
+//  bind.hpp - binds function objects to arguments
+//
+//  Copyright (c) 2015 Brian Fransioli
+//
+//  Distributed under the Boost Software License, Version 1.0.
+//  See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt
+//
+
 #ifndef AS_GLIB_EXECUTOR_HPP
 #define AS_GLIB_EXECUTOR_HPP
 
@@ -219,62 +229,43 @@ class GlibExecutor
 {
 	std::unique_ptr<GlibExecutorImpl> impl;
 
-	GlibExecutor(void *context);
+	GlibExecutor(void *context)
+		: impl( new GlibExecutorImpl( static_cast<GMainContext *>(context) ) )
+	{}
 
 public:
-	static GlibExecutor& GetDefault();
+	static GlibExecutor& GetDefault()
+	{
+		static GlibExecutor main_context{ g_main_context_default() };
+
+		return main_context;
+	}
 
 public:
-	GlibExecutor();
-	~GlibExecutor();
+	GlibExecutor()
+		: impl( new GlibExecutorImpl )
+	{}
 
-	void Schedule(Task task);
-	void ScheduleAfter(Task task, std::chrono::milliseconds time_ms);
+	void Schedule(Task task)
+	{
+		impl->AddTask( task );
+	}
 
-	void Iteration();
-	bool IsCurrent();
+	void ScheduleAfter(Task task, std::chrono::milliseconds time_ms)
+	{
+		impl->AddTimedTask( task, time_ms );
+	}
+
+	void Iteration()
+	{
+		impl->Iteration();
+	}
+
+	bool IsCurrent()
+	{
+		return impl->IsCurrent();
+	}
 };
-
-//private:
-GlibExecutor::GlibExecutor(void *context)
-	: impl( new GlibExecutorImpl( static_cast<GMainContext *>(context) ) )
-{}
-
-//public:
-GlibExecutor::GlibExecutor()
-	: impl( new GlibExecutorImpl )
-{}
-
-GlibExecutor::~GlibExecutor() = default;
-
-// static - get default main context
-GlibExecutor& GlibExecutor::GetDefault()
-{
-	// Default Main Context initialization
-	static GlibExecutor main_context{ g_main_context_default() };
-
-	return main_context;
-}
-
-void GlibExecutor::Schedule(Task task)
-{
-	impl->AddTask( task );
-}
-
-void GlibExecutor::ScheduleAfter(Task task, std::chrono::milliseconds time_ms)
-{
-	impl->AddTimedTask( task, time_ms );
-}
-
-void GlibExecutor::Iteration()
-{
-	impl->Iteration();
-}
-
-bool GlibExecutor::IsCurrent()
-{
-	return impl->IsCurrent();
-}
 
 } // namespace as
 

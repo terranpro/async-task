@@ -71,10 +71,6 @@ struct TaskFinisher
 		: result(result)
 	{}
 
-	TaskFinisher(as::TaskResult<T>&& result)
-		: result( std::move(result) )
-	{}
-
 	TaskFinisher(const TaskFinisher&) = default;
 	TaskFinisher(TaskFinisher&&) = default;
 
@@ -205,7 +201,24 @@ void thread_executor_test()
 
 		}, std::chrono::seconds(2) );
 
+	int counter = 0;
+	int iters = 969;
+
+	std::vector< TaskFinisher<void> > finishers;
+
+	for ( int i = 0; i < iters; ++i ) {
+		finishers.emplace_back(
+			as::async( exec,
+			           [&counter]() {
+				           ++counter;
+			           } )
+		                      );
+	}
+
 	std::this_thread::sleep_for( std::chrono::seconds(5) );
+
+	finishers.clear();
+	assert( counter == iters );
 }
 
 int main(int argc, char *argv[])

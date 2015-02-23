@@ -1,3 +1,13 @@
+//
+//  bind.hpp - binds function objects to arguments
+//
+//  Copyright (c) 2015 Brian Fransioli
+//
+//  Distributed under the Boost Software License, Version 1.0.
+//  See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt
+//
+
 #ifndef AS_COROUTINE_TASK_HPP
 #define AS_COROUTINE_TASK_HPP
 
