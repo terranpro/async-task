@@ -221,6 +221,22 @@ void thread_executor_test()
 	assert( counter == iters );
 }
 
+void async_ptr_from_unique_ptr()
+{
+	std::unique_ptr<foo> foo_uptr{new foo(42)};
+
+	as::AsyncPtr<foo> foo_aptr( std::move(foo_uptr) );
+
+	assert( foo_aptr );
+	assert( foo_aptr->x == 42 );
+
+	foo_aptr->inc();
+
+	assert( foo_aptr->x == 43 );
+
+	assert( !foo_uptr );
+}
+
 int main(int argc, char *argv[])
 {
 	foo_test();
@@ -228,6 +244,8 @@ int main(int argc, char *argv[])
 	coro_test();
 
 	thread_executor_test();
+
+	async_ptr_from_unique_ptr();
 
 	return 0;
 }

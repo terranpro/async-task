@@ -130,6 +130,23 @@ public:
 		, result( std::move(res) )
 	{}
 
+	AsyncPtr( std::unique_ptr<T> ptr )
+		: impl( std::make_shared<AsyncPtrImpl>() )
+		, result()
+	{
+		impl->data.reset( ptr.release() );
+	}
+
+	template<class U,
+	         typename = typename std::enable_if<
+		         std::is_convertible<U, T>::value
+	                                           >::type
+	        >
+	AsyncPtr( TaskResult<U> res )
+		: impl( std::make_shared<AsyncPtrImpl>() )
+		, result( std::move(res) )
+	{}
+
 	void Sync() const
 	{
 		std::lock_guard<std::mutex> lock{ impl->mut };
@@ -142,7 +159,7 @@ public:
 
 	// This is questionable in need/utility
 	explicit operator bool() const {
-		return result.Valid();
+		return impl->data || result.Valid();
 	}
 
 	// These two overloads are questionable, they hold no lock and allow
