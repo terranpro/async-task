@@ -1,5 +1,5 @@
 //
-//  bind.hpp - binds function objects to arguments
+//  Async.hpp - Async dispatch of functions via executors and locked objects
 //
 //  Copyright (c) 2015 Brian Fransioli
 //

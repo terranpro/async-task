@@ -1,5 +1,5 @@
 //
-//  bind.hpp - binds function objects to arguments
+//  Task.hpp - Asynchronous Tasks and TaskResult<>'s
 //
 //  Copyright (c) 2015 Brian Fransioli
 //

@@ -1,5 +1,5 @@
 //
-//  bind.hpp - binds function objects to arguments
+//  TaskContext.hpp - Task Context abstraction
 //
 //  Copyright (c) 2015 Brian Fransioli
 //

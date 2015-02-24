@@ -1,5 +1,5 @@
 //
-//  bind.hpp - binds function objects to arguments
+//  Await.hpp - Coroutine based await functionality
 //
 //  Copyright (c) 2015 Brian Fransioli
 //

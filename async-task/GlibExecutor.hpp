@@ -1,5 +1,5 @@
 //
-//  bind.hpp - binds function objects to arguments
+//  GlibExecutor.hpp - Glib based executor implementation
 //
 //  Copyright (c) 2015 Brian Fransioli
 //

@@ -1,5 +1,5 @@
 //
-//  bind.hpp - binds function objects to arguments
+//  Executor.hpp - Executor interface abstraction
 //
 //  Copyright (c) 2015 Brian Fransioli
 //

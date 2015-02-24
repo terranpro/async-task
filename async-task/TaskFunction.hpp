@@ -1,5 +1,5 @@
 //
-//  bind.hpp - binds function objects to arguments
+//  TaskFunction.hpp - Task function abstraction
 //
 //  Copyright (c) 2015 Brian Fransioli
 //

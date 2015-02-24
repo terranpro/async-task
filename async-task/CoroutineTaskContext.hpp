@@ -1,5 +1,5 @@
 //
-//  bind.hpp - binds function objects to arguments
+//  CoroutineTaskContext.hpp - Coroutine abstraction implemented via boost::context
 //
 //  Copyright (c) 2015 Brian Fransioli
 //
