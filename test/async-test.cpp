@@ -96,7 +96,7 @@ void foo_test()
 
 	as::AsyncPtr<int> handle2{ as::make_async<int>( 42 ) };
 
-	constexpr int THREAD_COUNT = 256;
+	constexpr int THREAD_COUNT = 16;
 
 	decltype( std::chrono::high_resolution_clock::now() - std::chrono::high_resolution_clock::now() )
 		clock_dur{};
@@ -143,7 +143,7 @@ void foo_test()
 	std::cout << "foo cons: " << foo::obj_cons << "\n";
 	std::cout << "foo copy: " << foo::obj_copy << "\n";
 
-	auto dur_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(clock_dur);
+	auto dur_ns = std::chrono::duration_cast<std::chrono::microseconds>(clock_dur);
 
 	std::cout << "Clock duration: " << dur_ns.count() << "\n";
 
@@ -175,12 +175,14 @@ void coro_test()
 
 			as::await( []() {
 					std::cout << "Start sleep...\n";
-					std::this_thread::sleep_for( std::chrono::seconds(5) );
+					std::this_thread::sleep_for( std::chrono::seconds(2) );
 					std::cout << "Done!\n";
 			} );
 
 			std::cout << "Awaiting DONE...!\n";
 	} );
+
+	mega_work_r.Get();
 
 #endif // AS_USE_COROUTINE_TASKS
 }
@@ -215,7 +217,7 @@ void thread_executor_test()
 		                      );
 	}
 
-	std::this_thread::sleep_for( std::chrono::seconds(5) );
+	std::this_thread::sleep_for( std::chrono::seconds(1) );
 
 	finishers.clear();
 	assert( counter == iters );
@@ -237,6 +239,81 @@ void async_ptr_from_unique_ptr()
 	assert( !foo_uptr );
 }
 
+struct base { virtual ~base() {}
+	virtual void action()
+	{
+		std::cout << "base!\n";
+	}
+};
+struct child : public base
+{
+	child(child const&)
+	{
+		std::cout << "child copy!\n";
+	}
+	child() = default;
+
+
+	virtual void action() override
+	{
+		std::cout << "child!\n";
+	}
+};
+
+void async_ptr_init_base_from_child_test()
+{
+	as::AsyncPtr<base> aptr = as::make_async<child>();
+
+	assert( aptr );
+
+	aptr->action();
+
+	// build from returning object
+	as::AsyncPtr<base> aptr2 = as::async( []() {
+			return child();
+		} );
+
+	assert( aptr2 );
+
+	aptr2->action();
+
+	// build from returning object pointer
+	as::AsyncPtr<base> aptr3 = as::async( []() {
+			return new child;
+		} );
+
+	aptr3->action();
+
+	// move an asyncptr and assure it still works
+	as::AsyncPtr<base> aptr4 = as::make_async<child>();
+	auto aptr5 = std::move( aptr4 );
+
+	assert( aptr5 );
+	assert( !aptr4 );
+
+	aptr5->action();
+
+	// move an asyncptr and asure it still works (async() version)
+	as::AsyncPtr<base> aptr6 = as::async([]() {
+			return new child;
+		} );
+
+	auto aptr7 = std::move(aptr6);
+	assert( aptr7 );
+	assert( !aptr6 );
+	aptr7->action();
+
+	as::AsyncPtr<base> aptr8 = as::async([]() {
+			return child();
+		} );
+	auto aptr9 = std::move(aptr8);
+
+	assert( aptr9 );
+	assert( !aptr8 );
+
+	aptr9->action();
+}
+
 int main(int argc, char *argv[])
 {
 	foo_test();
@@ -246,6 +323,8 @@ int main(int argc, char *argv[])
 	thread_executor_test();
 
 	async_ptr_from_unique_ptr();
+
+	async_ptr_init_base_from_child_test();
 
 	return 0;
 }

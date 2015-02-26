@@ -17,6 +17,8 @@
 #include <mutex>
 #include <utility>
 
+#include <cassert>
+
 namespace as {
 
 /// Create a Task and deduced TaskResult<> pair
@@ -106,8 +108,11 @@ CreateAsyncProxy( Obj *obj, Mutex& mut )
 }
 
 template<class T>
-struct AsyncPtr
+class AsyncPtr
 {
+	template<class U>
+	friend class AsyncPtr;
+
 	struct AsyncPtrImpl
 	{
 		std::mutex mut;
@@ -120,19 +125,66 @@ struct AsyncPtr
 
 	};
 
+	template<class U>
+	struct Setter
+	{
+		TaskResult<U> result;
+
+		Setter(TaskResult<U> r)
+			: result(r)
+		{}
+
+		U *operator()()
+		{
+			return new U( result.Get() );
+		}
+	};
+
+	template<class U>
+	struct Setter<U *>
+	{
+		TaskResult<U *> result;
+
+		Setter(TaskResult<U *> r)
+			: result(r)
+		{}
+
+		U *operator()()
+		{
+			return result.Get();
+		}
+	};
+
 private:
 	std::shared_ptr<AsyncPtrImpl> impl;
 	mutable TaskResult<T> result;
+	std::function<T *()> setter;
+
+private:
+
+	// template<class U>
+	// U *Setter( TaskResult<U *> result )
+	// {
+	// 	return result.Get();
+	// }
+
+	// template<class U>
+	// U *Setter( TaskResult<U> result )
+	// {
+	// 	return new U( result.Get() );
+	// }
 
 public:
 	AsyncPtr( TaskResult<T> res )
 		: impl( std::make_shared<AsyncPtrImpl>() )
 		, result( std::move(res) )
+		, setter( [=]() { return Setter<T>(result)(); } )
 	{}
 
 	AsyncPtr( std::unique_ptr<T> ptr )
 		: impl( std::make_shared<AsyncPtrImpl>() )
 		, result()
+		, setter()
 	{
 		impl->data.reset( ptr.release() );
 	}
@@ -144,7 +196,38 @@ public:
 	        >
 	AsyncPtr( TaskResult<U> res )
 		: impl( std::make_shared<AsyncPtrImpl>() )
-		, result( std::move(res) )
+		, result()
+		, setter( [=]() { return Setter<U>(res)(); } )
+	{}
+
+	template<class U,
+	         typename = typename std::enable_if<
+		         std::is_convertible<U, T>::value
+	                                           >::type
+	        >
+	AsyncPtr( TaskResult<U *>&& res )
+		: impl( std::make_shared<AsyncPtrImpl>() )
+		, result()
+		, setter( [=]() { return Setter<U *>( res )(); } )
+	{}
+
+	template<class U,
+	         typename = typename std::enable_if<
+		         std::is_convertible<U, T>::value
+	                                           >::type
+	        >
+	AsyncPtr( AsyncPtr<U>&& other )
+		: impl( std::make_shared<AsyncPtrImpl>() )
+		, result()
+		, setter( [=]()
+		          {
+			          // TODO: consider gutting the members and not copying
+			          // AsyncPtr<U> into lambda
+			          if ( other.result.Valid() )
+				          return Setter<U>( other.result )();
+
+			          return other.setter();
+		          } )
 	{}
 
 	void Sync() const
@@ -154,12 +237,14 @@ public:
 		if ( impl->data )
 			return;
 
-		impl->data.reset( new T( result.Get() ) );
+		assert( setter );
+
+		impl->data.reset( setter() );
 	}
 
 	// This is questionable in need/utility
 	explicit operator bool() const {
-		return impl->data || result.Valid();
+		return ( impl && impl->data ) || setter || result.Valid();
 	}
 
 	// These two overloads are questionable, they hold no lock and allow
@@ -200,9 +285,9 @@ public:
 // Assist with construction (args are copied, not forwarded, to be
 // compatible with std::bind()'s decay copy)
 template<class T, class... Args>
-T make_async_helper(Args... args)
+T *make_async_helper(Args... args)
 {
-	return T( std::forward<Args>(args)... );
+	return new T( std::forward<Args>(args)... );
 }
 
 // Construction done using constructor directly
@@ -231,7 +316,7 @@ AsyncPtr<T> make_async(Args&&... args)
 	                          std::forward<Args>(args)... );
 	auto res = as::async( std::move(bndfunc) );
 
-	return { res };
+	return std::move( res );
 }
 
 // Construction done via callable expression return result
