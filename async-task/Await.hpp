@@ -54,7 +54,8 @@ template<class Func, class... Args>
 decltype( std::declval<Func>()(std::declval<Args>()...) )
 await(Func&& func, Args&&... args)
 {
-	GlibExecutor ctxt;
+	//GlibExecutor ctxt;
+	ThreadExecutor ctxt;
 
 	return await( ctxt,
 	              std::forward<Func>(func),

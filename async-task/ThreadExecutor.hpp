@@ -11,6 +11,8 @@
 #ifndef AS_THREAD_EXECUTOR_HPP
 #define AS_THREAD_EXECUTOR_HPP
 
+#include "Executor.hpp"
+
 #include "Task.hpp"
 
 #include <thread>
@@ -50,13 +52,15 @@ class ThreadExecutor
 
 public:
 	ThreadExecutor()
-		: thr( &ThreadExecutor::ThreadEntryPoint, this )
+		: thr()
 		, task_mut()
 		, task_queue()
 		, cond()
 		, quit_requested(false)
 		, min_sleep_interval(-1)
-	{}
+	{
+		thr = std::thread( &ThreadExecutor::ThreadEntryPoint, this );
+	}
 
 	~ThreadExecutor()
 	{
@@ -116,6 +120,16 @@ private:
 
 			EnqueueRemaining( std::move(next_tasks) );
 		}
+
+		// TODO: refactor this nicely
+		// before exiting the thread, run any tasks left in queue
+		std::vector<TaskInfo> tasks;
+		{
+			std::unique_lock<std::mutex> lock{ task_mut };
+			tasks = task_queue;
+		}
+		while( tasks.size() )
+			tasks = ProcessTasks( tasks );
 	}
 
 	std::vector<TaskInfo>

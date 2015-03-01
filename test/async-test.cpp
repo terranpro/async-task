@@ -1,5 +1,7 @@
+#include "Async.hpp"
 #include "Await.hpp"
 #include "ThreadExecutor.hpp"
+#include "GlibExecutor.hpp"
 
 #include <iostream>
 #include <atomic>
@@ -85,69 +87,79 @@ void foo_test()
 {
 	const int init_val = 31337;
 
-	/* as::AsyncPtr<foo> handle */
-	auto handle = as::make_async<foo>(
-		[init_val]() {
-			return foo{init_val};
-		} );
+	try {
 
-	// alternate syntax
-	//as::AsyncPtr<foo> handle = as::make_async<foo>( 31337 );
 
-	as::AsyncPtr<int> handle2{ as::make_async<int>( 42 ) };
-
-	constexpr int THREAD_COUNT = 16;
-
-	decltype( std::chrono::high_resolution_clock::now() - std::chrono::high_resolution_clock::now() )
-		clock_dur{};
-
-	std::vector< TaskFinisher< decltype(clock_dur) > > finishers;
-
-	// Force initialization to finish, so we measure only access overhead
-	handle.Sync();
-
-	for ( int t = 0; t < THREAD_COUNT; ++t ) {
-
-		auto r = as::async( [=]() mutable {
-
-				auto beg = std::chrono::high_resolution_clock::now();
-				handle->inc();
-				auto end = std::chrono::high_resolution_clock::now();
-
-				return end-beg;
+		/* as::AsyncPtr<foo> handle */
+		auto handle = as::make_async<foo>(
+			[init_val]() {
+				return foo{init_val};
 			} );
 
-		finishers.emplace_back( r );
+		// alternate syntax
+		//as::AsyncPtr<foo> handle = as::make_async<foo>( 31337 );
+
+		as::AsyncPtr<int> handle2{ as::make_async<int>( 42 ) };
+
+		constexpr int THREAD_COUNT = 128;
+
+		decltype( std::chrono::high_resolution_clock::now() - std::chrono::high_resolution_clock::now() )
+			clock_dur{};
+
+		std::vector< TaskFinisher< decltype(clock_dur) > > finishers;
+
+		// Force initialization to finish, so we measure only access overhead
+		handle.Sync();
+
+		std::vector< as::ThreadExecutor > threads(THREAD_COUNT);
+
+		for ( int t = 0; t < THREAD_COUNT; ++t ) {
+
+			auto r = as::async( threads[0], [=]() mutable {
+
+					auto beg = std::chrono::high_resolution_clock::now();
+					handle->inc();
+					auto end = std::chrono::high_resolution_clock::now();
+
+					return end-beg;
+				} );
+
+			finishers.emplace_back( r );
+		}
+
+		for ( auto& f : finishers ) {
+			auto dur = f.result.Get();
+			clock_dur += dur;
+		}
+		{
+			// must destroy proxy to release the lock!
+			auto proxy = handle2.GetProxy();
+			*proxy = 96;
+		}
+
+		auto xyz = handle2;
+
+		assert( handle );
+		assert( handle2 );
+
+		assert( handle->x == init_val + THREAD_COUNT );
+		assert( *handle2 == 96 );
+		assert( *handle2 == xyz );
+
+		std::cout << "foo cons: " << foo::obj_cons << "\n";
+		std::cout << "foo copy: " << foo::obj_copy << "\n";
+
+		auto dur_ns = std::chrono::duration_cast<std::chrono::microseconds>(clock_dur);
+
+		std::cout << "Clock duration: " << dur_ns.count() << "\n";
+
+		finishers.clear();
+
+	} catch (std::exception& ex) {
+		std::cout << "Caught exception: ex.what()\n";
+		throw;
 	}
 
-	for ( auto& f : finishers ) {
-		auto dur = f.result.Get();
-		clock_dur += dur;
-	}
-
-	{
-		// must destroy proxy to release the lock!
-		auto proxy = handle2.GetProxy();
-		*proxy = 96;
-	}
-
-	auto xyz = handle2;
-
-	assert( handle );
-	assert( handle2 );
-
-	assert( handle->x == init_val + THREAD_COUNT );
-	assert( *handle2 == 96 );
-	assert( *handle2 == xyz );
-
-	std::cout << "foo cons: " << foo::obj_cons << "\n";
-	std::cout << "foo copy: " << foo::obj_copy << "\n";
-
-	auto dur_ns = std::chrono::duration_cast<std::chrono::microseconds>(clock_dur);
-
-	std::cout << "Clock duration: " << dur_ns.count() << "\n";
-
-	finishers.clear();
 }
 
 void coro_test()
@@ -239,7 +251,8 @@ void async_ptr_from_unique_ptr()
 	assert( !foo_uptr );
 }
 
-struct base { virtual ~base() {}
+struct base {
+	virtual ~base() {}
 	virtual void action()
 	{
 		std::cout << "base!\n";
@@ -247,16 +260,27 @@ struct base { virtual ~base() {}
 };
 struct child : public base
 {
-	child(child const&)
-	{
-		std::cout << "child copy!\n";
-	}
-	child() = default;
+	int users;
+	int actions;
 
+	child(child const& other)
+		: users(0)
+		, actions(0)
+	{}
+
+	child()
+		: users(0)
+		, actions(0)
+	{}
 
 	virtual void action() override
 	{
-		std::cout << "child!\n";
+		++users;
+		++actions;
+
+		assert( users == 1 );
+
+		--users;
 	}
 };
 
@@ -312,6 +336,37 @@ void async_ptr_init_base_from_child_test()
 	assert( !aptr8 );
 
 	aptr9->action();
+
+	// copy an asyncptr of derived to base and use both
+	as::AsyncPtr<child> aptr10 = as::make_async<child>();
+	as::AsyncPtr<base> aptr11 = aptr10;
+
+	assert( aptr10 );
+	assert( aptr11 );
+
+	aptr10->action();
+	aptr11->action();
+
+	assert( aptr10->actions == 2 );
+
+	// now a lot in a bunch of threads
+	std::vector< TaskFinisher<void> > results;
+
+	const int THREAD_COUNT = 64;
+	for ( auto i = 0; i < THREAD_COUNT; ++i ) {
+		auto r = as::async( [aptr10]() {
+				aptr10->action();
+			} );
+		results.emplace_back( r );
+
+		r = as::async( [aptr11]() {
+				aptr11->action();
+			} );
+		results.emplace_back( r );
+	}
+	results.clear();
+
+	assert( aptr10->actions == ( THREAD_COUNT*2 + 2 ) );
 }
 
 int main(int argc, char *argv[])

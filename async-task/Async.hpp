@@ -11,7 +11,8 @@
 #ifndef AS_ASYNC_HPP
 #define AS_ASYNC_HPP
 
-#include "GlibExecutor.hpp"
+// #include "GlibExecutor.hpp"
+#include "ThreadExecutor.hpp"
 
 #include <atomic>
 #include <mutex>
@@ -63,7 +64,11 @@ template<class Func, class... Args>
 TaskResult< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
 async(Func&& func, Args&&... args)
 {
-	GlibExecutor c;
+	// TODO: examine why launching 48+ GlibExecutor's might deadlock on
+	// Cygwin; replaced default with ThreadExecutor's to start
+
+	//GlibExecutor c;
+	ThreadExecutor c;
 
 	return async( c,
 	              std::forward<Func>(func),
@@ -107,97 +112,127 @@ CreateAsyncProxy( Obj *obj, Mutex& mut )
 	return AsyncProxyObject< Obj >{ obj, std::move(lock) };
 }
 
+struct AsyncPtrControlBlock
+{
+	std::mutex mut;
+	void *data;
+	std::once_flag flag;
+	bool synced;
+
+	AsyncPtrControlBlock()
+		: mut()
+		, data()
+		, flag()
+		, synced(false)
+	{}
+
+	virtual ~AsyncPtrControlBlock()
+	{}
+
+	virtual void SetResult() = 0;
+
+	std::unique_lock<std::mutex> Lock()
+	{
+		return std::unique_lock<std::mutex>{ mut };
+	}
+
+	void *Sync()
+	{
+		std::call_once( flag, [=]() {
+				auto lock = Lock();
+				SetResult();
+				synced = true;
+			} );
+
+		return data;
+	}
+};
+
+template<class T>
+struct AsyncPtrSynchronizer
+	: public AsyncPtrControlBlock
+{
+	TaskResult<T> result;
+	std::unique_ptr<T> ptr;
+
+	AsyncPtrSynchronizer(TaskResult<T> r)
+		: result( std::move(r) )
+	{}
+
+	void SetResult()
+	{
+		ptr.reset( new T( result.Get() ) );
+		data = ptr.get();
+
+		// data = new T( result.Get() );
+		// ptr.reset( static_cast<T *>(data) );
+	}
+};
+
+template<class T>
+struct AsyncPtrSynchronizer<T *>
+	: public AsyncPtrControlBlock
+{
+	TaskResult<T *> result;
+	std::unique_ptr<T> ptr;
+
+	AsyncPtrSynchronizer(std::unique_ptr<T> ptr)
+		: result()
+	{
+		data = ptr.release();
+	}
+
+	AsyncPtrSynchronizer(TaskResult<T *>&& r)
+		: result( std::move(r) )
+	{}
+
+	void SetResult()
+	{
+		if (data)
+			return;
+
+		ptr.reset( result.Get() );
+		data = ptr.get();
+
+		// data = result.Get();
+		// ptr.reset( static_cast<T *>(data) );
+	}
+};
+
 template<class T>
 class AsyncPtr
 {
 	template<class U>
 	friend class AsyncPtr;
 
-	struct AsyncPtrImpl
-	{
-		std::mutex mut;
-		std::unique_ptr<T> data;
-
-		AsyncPtrImpl()
-			: mut()
-			, data()
-		{}
-
-	};
-
-	template<class U>
-	struct Setter
-	{
-		TaskResult<U> result;
-
-		Setter(TaskResult<U> r)
-			: result(r)
-		{}
-
-		U *operator()()
-		{
-			return new U( result.Get() );
-		}
-	};
-
-	template<class U>
-	struct Setter<U *>
-	{
-		TaskResult<U *> result;
-
-		Setter(TaskResult<U *> r)
-			: result(r)
-		{}
-
-		U *operator()()
-		{
-			return result.Get();
-		}
-	};
-
 private:
-	std::shared_ptr<AsyncPtrImpl> impl;
-	mutable TaskResult<T> result;
-	std::function<T *()> setter;
-
-private:
-
-	// template<class U>
-	// U *Setter( TaskResult<U *> result )
-	// {
-	// 	return result.Get();
-	// }
-
-	// template<class U>
-	// U *Setter( TaskResult<U> result )
-	// {
-	// 	return new U( result.Get() );
-	// }
+	mutable T* ptr;
+	std::shared_ptr<AsyncPtrControlBlock> impl;
 
 public:
-	AsyncPtr( TaskResult<T> res )
-		: impl( std::make_shared<AsyncPtrImpl>() )
-		, result( std::move(res) )
-		, setter( [=]() { return Setter<T>(result)(); } )
+	AsyncPtr()
+		: ptr()
+		, impl()
 	{}
 
-	AsyncPtr( std::unique_ptr<T> ptr )
-		: impl( std::make_shared<AsyncPtrImpl>() )
-		, result()
-		, setter()
-	{
-		impl->data.reset( ptr.release() );
-	}
+	AsyncPtr( TaskResult<T> res )
+		: ptr()
+		, impl( std::make_shared< AsyncPtrSynchronizer<T> >(res) )
+	{}
+
+	AsyncPtr( std::unique_ptr<T> uptr )
+		: ptr( uptr.get() )
+		, impl( std::make_shared< AsyncPtrSynchronizer<T *> >(std::move(uptr)) )
+	{}
 
 	template<class U,
 	         typename = typename std::enable_if<
-		         std::is_convertible<U, T>::value
+		         std::is_convertible<U, T>::value &&
+		         !std::is_pointer<U>::value
 	                                           >::type
 	        >
 	AsyncPtr( TaskResult<U> res )
-		: impl( std::make_shared<AsyncPtrImpl>() )
-		, result()
-		, setter( [=]() { return Setter<U>(res)(); } )
+		: ptr(), impl( std::make_shared<AsyncPtrSynchronizer<U> >(res) )
 	{}
 
 	template<class U,
@@ -206,9 +241,8 @@ public:
 	                                           >::type
 	        >
 	AsyncPtr( TaskResult<U *>&& res )
-		: impl( std::make_shared<AsyncPtrImpl>() )
-		, result()
-		, setter( [=]() { return Setter<U *>( res )(); } )
+		: ptr()
+		, impl( std::make_shared<AsyncPtrSynchronizer<U *> >(std::move(res)) )
 	{}
 
 	template<class U,
@@ -217,68 +251,67 @@ public:
 	                                           >::type
 	        >
 	AsyncPtr( AsyncPtr<U>&& other )
-		: impl( std::make_shared<AsyncPtrImpl>() )
-		, result()
-		, setter( [=]()
-		          {
-			          // TODO: consider gutting the members and not copying
-			          // AsyncPtr<U> into lambda
-			          if ( other.result.Valid() )
-				          return Setter<U>( other.result )();
+		: ptr( std::move(other.ptr) )
+		, impl( std::move(other.impl) )
+	{}
 
-			          return other.setter();
-		          } )
+	template<class U,
+	         typename = typename std::enable_if<
+		         std::is_convertible<U, T>::value
+	                                           >::type
+	        >
+	AsyncPtr( AsyncPtr<U> const& other )
+		: ptr( other.ptr )
+		, impl( other.impl )
 	{}
 
 	void Sync() const
 	{
-		std::lock_guard<std::mutex> lock{ impl->mut };
+		assert( impl );
 
-		if ( impl->data )
+		if (ptr)
 			return;
 
-		assert( setter );
-
-		impl->data.reset( setter() );
+		ptr = static_cast<T *>( impl->Sync() );
 	}
 
 	// This is questionable in need/utility
 	explicit operator bool() const {
-		return ( impl && impl->data ) || setter || result.Valid();
+		return !!impl;
 	}
 
 	// These two overloads are questionable, they hold no lock and allow
 	// read-only access; the first is also iffy for implicit conversions
 	operator const T&() const {
 		Sync();
-		return *impl->data;
+		return *ptr;
 	}
 
 	const T& operator*() const {
 		Sync();
-		return *impl->data;
+		return *ptr;
 	}
 
 	AsyncProxyObject<T> operator->() {
 		Sync();
-		return CreateAsyncProxy( &(*impl->data), impl->mut );
+		return AsyncProxyObject< T >( ptr, impl->Lock() );
 	}
 
 	AsyncProxyObject<T> const operator->() const {
 		Sync();
-		return CreateAsyncProxy( &(*impl->data), impl->mut );
+		return AsyncProxyObject< T >( ptr, impl->Lock() );
 	}
 
 	AsyncProxyObject<T> GetProxy() const
 	{
 		Sync();
-		return CreateAsyncProxy( &(*impl->data), impl->mut );
+		return AsyncProxyObject< T >( ptr, impl->Lock() );
 	}
 
 	T& Direct() const {
 		Sync();
 
-		return *impl->data;
+		return *ptr;
 	}
 };
 
