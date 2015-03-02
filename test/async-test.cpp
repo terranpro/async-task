@@ -201,19 +201,34 @@ void coro_test()
 
 void thread_executor_test()
 {
+	bool inner_done = false;
+
 	as::ThreadExecutor exec;
 
-	exec.ScheduleAfter( [&]() {
-			std::cout << "Amazing forever.\n";
-			exec.ScheduleAfter( [&]() {
-					std::cout << "First!\n";
-					exec.ScheduleAfter( []() {
-							std::cout << "Inner!\n";
-						}, std::chrono::seconds(1) );
+	as::TaskResult<void> mid_result;
+	as::TaskResult<void> inner_result;
 
-				}, std::chrono::seconds(1) );
+	auto innerfunc = [&inner_done]() {
+		std::cout << "Inner!\n";
+		inner_done = true;
+	};
 
-		}, std::chrono::seconds(2) );
+	auto pair = as::make_task_pair( as::Task::GenericTag{}, innerfunc );
+	auto inner_task = pair.first;
+	inner_result = pair.second;
+
+	auto middlefunc = [&]() {
+		std::cout << "First!\n";
+
+		exec.ScheduleAfter( inner_task, std::chrono::seconds(1) );
+	};
+
+	auto outerfunc = [&]() {
+		std::cout << "Amazing forever.\n";
+		exec.ScheduleAfter( middlefunc, std::chrono::seconds(1) );
+	};
+
+	exec.ScheduleAfter( outerfunc, std::chrono::seconds(2) );
 
 	int counter = 0;
 	int iters = 969;
@@ -233,6 +248,10 @@ void thread_executor_test()
 
 	finishers.clear();
 	assert( counter == iters );
+
+	inner_result.Get();
+
+	assert( inner_done == true );
 }
 
 void async_ptr_from_unique_ptr()

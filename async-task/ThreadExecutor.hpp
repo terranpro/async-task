@@ -23,6 +23,8 @@
 #include <vector>
 #include <algorithm>
 
+#include <cassert>
+
 namespace as {
 
 class ThreadExecutor
@@ -64,10 +66,9 @@ public:
 
 	~ThreadExecutor()
 	{
-		quit_requested = true;
-
 		{
 			std::unique_lock<std::mutex> lock{ task_mut };
+			quit_requested = true;
 			cond.notify_all();
 		}
 
@@ -124,12 +125,23 @@ private:
 		// TODO: refactor this nicely
 		// before exiting the thread, run any tasks left in queue
 		std::vector<TaskInfo> tasks;
+
+		for ( std::unique_lock<std::mutex> lock{ task_mut };
+		      task_queue.size() != 0 || tasks.size() != 0;
+		    )
 		{
-			std::unique_lock<std::mutex> lock{ task_mut };
-			tasks = task_queue;
-		}
-		while( tasks.size() )
+			if ( task_queue.size() )
+				std::move( task_queue.begin(), task_queue.end(), std::back_inserter(tasks) );
+			task_queue.clear();
+
+			assert( task_queue.size() == 0 );
+
+			lock.unlock();
+
 			tasks = ProcessTasks( tasks );
+
+			lock.lock();
+		}
 	}
 
 	std::vector<TaskInfo>
