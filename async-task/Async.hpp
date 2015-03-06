@@ -19,6 +19,7 @@
 #include <utility>
 
 #include <cassert>
+#include <iostream>
 
 namespace as {
 
@@ -124,8 +125,15 @@ struct AsyncPtrControlBlock
 
 	LockType Lock()
 	{
-		LockType lock{ mut };
+		LockType lock{ mut, std::try_to_lock };
 
+		if ( !lock ) {
+			std::this_thread::sleep_for( std::chrono::milliseconds(1) );
+
+			std::cout << "Try to lock again...\n";
+
+			return Lock();
+		}
 		return lock;
 	}
 
@@ -218,6 +226,15 @@ class AsyncPtr
 {
 	template<class U>
 	friend class AsyncPtr;
+
+	template<class... APtrs>
+	friend auto lock_async(APtrs&&... aptrs)
+	-> decltype( std::make_tuple(
+		             std::unique_lock<std::recursive_mutex>(
+			             std::forward<APtrs>(aptrs).impl->mut, std::adopt_lock
+		                                                   )...
+	                            )
+	           );
 
 private:
 	mutable T* ptr;
@@ -403,6 +420,25 @@ AsyncPtr<T> make_async(Func&& func, Args&&... args)
 {
 	return { as::async( std::forward<Func>(func),
 	                    std::forward<Args>(args)... ) };
+}
+
+// Lock multiple AsyncPtr's atomically to prevent deadlock b/t
+// complicated interactions
+template<class... APtrs>
+auto lock_async(APtrs&&... aptrs)
+	-> decltype( std::make_tuple(
+		             std::unique_lock<std::recursive_mutex>(
+			             std::forward<APtrs>(aptrs).impl->mut, std::adopt_lock
+		                                                   )...
+	                            )
+	           )
+{
+	std::lock( aptrs.impl->mut... );
+	return std::make_tuple(
+		std::unique_lock<std::recursive_mutex>(
+			std::forward<APtrs>(aptrs).impl->mut, std::adopt_lock
+		                                      )...
+	                      );
 }
 
 } // namespace as

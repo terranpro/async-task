@@ -419,8 +419,10 @@ void async_ptr_recursive_use_test()
 	as::AsyncPtr<child> aptr = as::make_async<child>();
 
 	aptr->run_func( [=]() {
-			aptr->action();
-			std::cout << "Action done!\n";
+			aptr->run_func( [=]() {
+					aptr->action();
+					std::cout << "Action done!\n";
+			                } );
 	} );
 }
 
@@ -446,6 +448,78 @@ void async_ops_test()
 	assert( c.actions == ( THREAD_COUNT ) );
 }
 
+void async_deadlock_test_single_thread()
+{
+	auto x = as::make_async<child>();
+	auto y = as::make_async<child>();
+
+	std::cout << "Testing for deadlock...\n";
+
+	x->run_func( [=]() {
+
+			y->run_func( [=]() {
+
+					x->run_func( [=]() {
+							y->action();
+				  } );
+			} );
+	} );
+
+	std::cout << "Deadlock avoided!\n";
+}
+
+void async_deadlock_test_multi_thread()
+{
+	auto x = as::make_async<child>();
+	auto y = as::make_async<child>();
+
+	auto fwd_job = [=]() {
+		auto locks = as::lock_async(x,y);
+
+		x->run_func( [=]() {
+				y->run_func( [=]() {
+						x->run_func( [=]() {
+								y->action();
+						             } );
+				             } );
+		             } );
+	};
+
+	auto bwd_job = [=]() {
+
+		auto locks = as::lock_async(x,y);
+
+		y->run_func( [=]() {
+				x->run_func( [=]() {
+						y->run_func( [=]() {
+								x->action();
+						             } );
+				             } );
+
+		             } );
+	};
+
+	const int ITERATION_COUNT = 8192;
+	{
+		as::ThreadExecutor ta;
+		as::ThreadExecutor tb;
+		as::ThreadExecutor tc;
+
+		std::vector< TaskFinisher<void> > results;
+		for ( auto i = 0; i < ITERATION_COUNT; ++i ) {
+
+			results.emplace_back( as::async( ta, fwd_job ) );
+			results.emplace_back( as::async( ta, bwd_job ) );
+
+			results.emplace_back( as::async( tb, fwd_job ) );
+			results.emplace_back( as::async( tb, bwd_job ) );
+
+			results.emplace_back( as::async( tc, fwd_job ) );
+			results.emplace_back( as::async( tc, bwd_job ) );
+		}
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	foo_test();
@@ -461,6 +535,10 @@ int main(int argc, char *argv[])
 	async_ptr_recursive_use_test();
 
 	async_ops_test();
+
+	async_deadlock_test_single_thread();
+
+	async_deadlock_test_multi_thread();
 
 	return 0;
 }
