@@ -268,6 +268,14 @@ void async_ptr_from_unique_ptr()
 	assert( foo_aptr->x == 43 );
 
 	assert( !foo_uptr );
+
+	as::AsyncPtr<foo> foo_aptr2 = as::async( []() {
+			return std::unique_ptr<foo>( new foo(42) );
+		} );
+
+	foo_aptr2->inc();
+
+	assert( foo_aptr2->x == 43 );
 }
 
 struct base {
@@ -276,6 +284,7 @@ struct base {
 	{
 		std::cout << "base!\n";
 	}
+	virtual void pure_virt() = 0;
 };
 struct child : public base
 {
@@ -300,6 +309,15 @@ struct child : public base
 		assert( users == 1 );
 
 		--users;
+	}
+
+	virtual void pure_virt() override
+	{}
+
+	template<class Func, class... Args>
+	void run_func(Func&& func, Args&&... args)
+	{
+		func(args...);
 	}
 };
 
@@ -386,6 +404,24 @@ void async_ptr_init_base_from_child_test()
 	results.clear();
 
 	assert( aptr10->actions == ( THREAD_COUNT*2 + 2 ) );
+
+	// base loaded from base unique_ptr created by factory func
+	auto factory_func = []() {
+		return std::unique_ptr<base>( new child );
+	};
+	as::AsyncPtr<base> aptr12 = as::async( [=]() {
+			return factory_func();
+		} );
+}
+
+void async_ptr_recursive_use_test()
+{
+	as::AsyncPtr<child> aptr = as::make_async<child>();
+
+	aptr->run_func( [=]() {
+			aptr->action();
+			std::cout << "Action done!\n";
+	} );
 }
 
 int main(int argc, char *argv[])
@@ -399,6 +435,8 @@ int main(int argc, char *argv[])
 	async_ptr_from_unique_ptr();
 
 	async_ptr_init_base_from_child_test();
+
+	async_ptr_recursive_use_test();
 
 	return 0;
 }

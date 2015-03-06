@@ -75,15 +75,15 @@ async(Func&& func, Args&&... args)
 	              std::forward<Args>(args)... );
 }
 
-template<class Obj>
+template<class Obj, class Mutex = std::recursive_mutex>
 class AsyncProxyObject
 {
 private:
 	Obj *obj;
-	mutable std::unique_lock<std::mutex> unlock;
+	mutable std::unique_lock<Mutex> unlock;
 
 public:
-	AsyncProxyObject(Obj *obj, std::unique_lock<std::mutex> lock)
+	AsyncProxyObject(Obj *obj, std::unique_lock<Mutex> lock)
 		: obj(obj), unlock(std::move(lock))
 	{}
 
@@ -107,14 +107,19 @@ template<class Obj, class Mutex>
 AsyncProxyObject< Obj >
 CreateAsyncProxy( Obj *obj, Mutex& mut )
 {
-	std::unique_lock<std::mutex> lock{ mut };
+	std::unique_lock<Mutex> lock{ mut };
 
 	return AsyncProxyObject< Obj >{ obj, std::move(lock) };
 }
 
 struct AsyncPtrControlBlock
 {
-	std::mutex mut;
+	typedef std::recursive_mutex MutexType;
+	typedef std::unique_lock<MutexType> LockType;
+
+	// Recursive mutex used to protect against deadlock if a
+	// callback/signal tries to recursively access AsyncPtr<>
+	std::recursive_mutex mut;
 	void *data;
 	std::once_flag flag;
 	bool synced;
@@ -131,9 +136,11 @@ struct AsyncPtrControlBlock
 
 	virtual void SetResult() = 0;
 
-	std::unique_lock<std::mutex> Lock()
+	LockType Lock()
 	{
-		return std::unique_lock<std::mutex>{ mut };
+		LockType lock{ mut };
+
+		return lock;
 	}
 
 	void *Sync()
@@ -200,6 +207,27 @@ struct AsyncPtrSynchronizer<T *>
 };
 
 template<class T>
+struct AsyncPtrSynchronizer< std::unique_ptr<T> >
+	: public AsyncPtrControlBlock
+{
+	TaskResult< std::unique_ptr<T> > result;
+	std::unique_ptr<T> ptr;
+
+	AsyncPtrSynchronizer(TaskResult< std::unique_ptr<T> >&& r)
+		: result( std::move(r) )
+	{}
+
+	void SetResult()
+	{
+		if (data)
+			return;
+
+		ptr = std::move( result.Get() );
+		data = ptr.get();
+	}
+};
+
+template<class T>
 class AsyncPtr
 {
 	template<class U>
@@ -227,8 +255,20 @@ public:
 
 	template<class U,
 	         typename = typename std::enable_if<
-		         std::is_convertible<U, T>::value &&
+		          ( std::is_base_of<T, U>::value ||
+		            std::is_convertible<U, T>::value ) &&
 		         !std::is_pointer<U>::value
+	                                           >::type
+	        >
+	AsyncPtr( TaskResult< std::unique_ptr<U> > res )
+		: ptr(), impl( std::make_shared<AsyncPtrSynchronizer< std::unique_ptr<U> > >( std::move(res) ) )
+	{}
+
+	template<class U,
+	         typename = typename std::enable_if<
+		         ( std::is_base_of<T, U>::value
+		           || std::is_convertible<U, T>::value )
+		&& !std::is_pointer<U>::value
 	                                           >::type
 	        >
 	AsyncPtr( TaskResult<U> res )
@@ -237,6 +277,7 @@ public:
 
 	template<class U,
 	         typename = typename std::enable_if<
+		         std::is_base_of<T, U>::value ||
 		         std::is_convertible<U, T>::value
 	                                           >::type
 	        >
@@ -247,6 +288,7 @@ public:
 
 	template<class U,
 	         typename = typename std::enable_if<
+		         std::is_base_of<T, U>::value ||
 		         std::is_convertible<U, T>::value
 	                                           >::type
 	        >
@@ -257,6 +299,7 @@ public:
 
 	template<class U,
 	         typename = typename std::enable_if<
+		         std::is_base_of<T, U>::value ||
 		         std::is_convertible<U, T>::value
 	                                           >::type
 	        >
