@@ -424,6 +424,28 @@ void async_ptr_recursive_use_test()
 	} );
 }
 
+void async_ops_test()
+{
+	const int THREAD_COUNT = 64;
+	child c;
+	{
+		as::ThreadExecutor child_ctxt;
+
+		std::vector< TaskFinisher<void> > results;
+		for ( auto i = 0; i < THREAD_COUNT; ++i ) {
+			auto r = as::async( [&]() {
+					as::async( child_ctxt, [&c]() {
+							c.action();
+						} );
+				} );
+		}
+
+		results.clear();
+	}
+
+	assert( c.actions == ( THREAD_COUNT ) );
+}
+
 int main(int argc, char *argv[])
 {
 	foo_test();
@@ -437,6 +459,8 @@ int main(int argc, char *argv[])
 	async_ptr_init_base_from_child_test();
 
 	async_ptr_recursive_use_test();
+
+	async_ops_test();
 
 	return 0;
 }
