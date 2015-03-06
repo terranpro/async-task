@@ -80,16 +80,11 @@ class AsyncProxyObject
 {
 private:
 	Obj *obj;
-	mutable std::unique_lock<Mutex> unlock;
+	std::unique_lock<Mutex> unlock;
 
 public:
 	AsyncProxyObject(Obj *obj, std::unique_lock<Mutex> lock)
 		: obj(obj), unlock(std::move(lock))
-	{}
-
-	AsyncProxyObject(AsyncProxyObject const& other)
-		: obj(other.obj)
-		, unlock(std::move(other.unlock))
 	{}
 
 	Obj* operator->() const
@@ -102,15 +97,6 @@ public:
 		return *obj;
 	}
 };
-
-template<class Obj, class Mutex>
-AsyncProxyObject< Obj >
-CreateAsyncProxy( Obj *obj, Mutex& mut )
-{
-	std::unique_lock<Mutex> lock{ mut };
-
-	return AsyncProxyObject< Obj >{ obj, std::move(lock) };
-}
 
 struct AsyncPtrControlBlock
 {
