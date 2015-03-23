@@ -22,6 +22,7 @@ public:
 
 	virtual void Invoke() = 0;
 	virtual void Yield() = 0;
+	virtual void Cancel() = 0;
 };
 
 class TaskContext
@@ -52,6 +53,11 @@ public:
 
 	virtual void Yield()
 	{}
+
+	virtual void Cancel()
+	{
+		taskfunc->Cancel();
+	}
 };
 
 } // namespace as

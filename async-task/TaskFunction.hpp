@@ -16,6 +16,7 @@ struct TaskFunctionBase
 	virtual ~TaskFunctionBase() {}
 
 	virtual void Run() = 0;
+	virtual void Cancel() = 0;
 	virtual bool IsFinished() const = 0;
 };
 

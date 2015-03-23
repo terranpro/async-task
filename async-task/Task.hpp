@@ -16,6 +16,8 @@
 #include <vector>
 #include <functional>
 
+#include <iostream>
+
 // TODO: enable when platform boost supports context
 //#undef AS_USE_COROUTINE_TASKS
 
@@ -27,6 +29,94 @@
 #endif // AS_USE_COROUTINE_TASKS
 
 namespace as {
+
+enum class TaskStatus {
+	Finished,
+	Repeat,
+	Continuing,
+	Canceled
+};
+
+template<class T>
+struct TaskFuncResult;
+
+template<>
+struct TaskFuncResult<void>;
+
+template<>
+struct TaskFuncResult<void>
+{
+	TaskStatus status;
+
+	TaskFuncResult()
+		: status()
+	{}
+
+	TaskFuncResult(TaskStatus s)
+		: status(s)
+	{}
+
+	template<class U>
+	operator TaskFuncResult<U>()
+	{
+		return TaskFuncResult<U>(*this);
+	}
+};
+
+template<class T>
+struct TaskFuncResult
+{
+	TaskStatus status;
+	std::unique_ptr<T> ret;
+
+	TaskFuncResult()
+		: status()
+		, ret()
+	{}
+
+	TaskFuncResult(TaskStatus s)
+		: status(s)
+		, ret()
+	{}
+
+	TaskFuncResult(TaskStatus s, T val)
+		: status(s)
+		, ret( new T{ val } )
+	{}
+
+	explicit TaskFuncResult(T val)
+		: status()
+		, ret( new T{ val } )
+	{}
+
+	TaskFuncResult(TaskFuncResult<void> const& other)
+		: status(other.status)
+		, ret()
+	{}
+};
+
+static const TaskFuncResult<void> repeat{ TaskStatus::Repeat };
+static const TaskFuncResult<void> cancel{ TaskStatus::Canceled };
+
+template<class T>
+TaskFuncResult< typename std::remove_reference<T>::type >
+finished(T&& res)
+{
+	return TaskFuncResult< typename std::remove_reference<T>::type >( TaskStatus::Finished, std::forward<T>(res) );
+}
+
+template<class T>
+TaskFuncResult< typename std::remove_reference<T>::type >
+continuing(T&& res)
+{
+	return TaskFuncResult< typename std::remove_reference<T>::type >( TaskStatus::Continuing, std::forward<T>(res) );
+}
+
+enum WaitStatus {
+	Deferred = static_cast<int>( std::future_status::deferred ),
+	Ready = static_cast<int>( std::future_status::ready ),
+	Timeout = static_cast<int>( std::future_status::timeout )
+};
 
 template<class T>
 struct TaskResultControlBlock
@@ -46,9 +136,35 @@ struct TaskResultControlBlock
 	template<class Func>
 	void Run(Func& task_func)
 	{
+		if ( IsFinished() )
+			return;
+
 		result.reset( new T{ task_func() } );
 
 		result_promise.set_value( *result );
+	}
+
+	void Cancel()
+	{
+		std::cout << "CANCELED!\n";
+
+		decltype(result_future) invalidate;
+		result_future = std::move(invalidate);
+	}
+
+	bool Valid() const
+	{
+		return result_future.valid();
+	}
+
+	bool IsFinished() const
+	{
+		return Valid() == false || result != nullptr;
+	}
+
+	result_type Get()
+	{
+		return result_future.get();
 	}
 };
 
@@ -67,16 +183,128 @@ struct TaskResultControlBlock<void>
 
 	void Run(std::function<void()>& task_func)
 	{
+		if ( IsFinished() )
+			return;
+
 		task_func();
 
 		result_promise.set_value();
 	}
+
+	void Cancel()
+	{
+		std::cout << "CANCELED!\n";
+		decltype(result_future) invalidate;
+		result_future = std::move(invalidate);
+	}
+
+	bool Valid() const
+	{
+		return result_future.valid();
+	}
+
+	bool IsFinished() const
+	{
+		if ( !Valid() )
+			return true;
+
+		return ( result_future.wait_for( std::chrono::nanoseconds(0) )
+		         == std::future_status::ready );
+	}
+
+	void Get()
+	{
+		result_future.get();
+	}
+
+	void Wait()
+	{
+		result_future.wait();
+	}
+
+	template<class Rep, class Period>
+	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
+	{
+		return static_cast<WaitStatus>( static_cast<int>( result_future.wait_for( dur ) ) );
+	}
 };
 
-enum WaitStatus {
-	Deferred = static_cast<int>( std::future_status::deferred ),
-	Ready = static_cast<int>( std::future_status::ready ),
-	Timeout = static_cast<int>( std::future_status::timeout )
+template<class T>
+struct TaskResultControlBlock< TaskFuncResult<T> >
+{
+	typedef std::unique_ptr<T> result_type;
+
+	std::vector< std::unique_ptr<T> > results;
+	std::mutex results_mut;
+	std::condition_variable results_cond;
+	std::atomic<bool> finished;
+	std::atomic<bool> canceled;
+
+	TaskResultControlBlock()
+		: results()
+		, results_mut()
+		, results_cond()
+		, finished(false)
+		, canceled(false)
+	{}
+
+	template<class Func>
+	void Run(Func& task_func)
+	{
+		if ( canceled )
+			return;
+
+		TaskFuncResult<T> fr = task_func();
+
+		if ( fr.status == TaskStatus::Finished ||
+		     fr.status == TaskStatus::Continuing ) {
+
+			std::lock_guard<std::mutex> lock( results_mut );
+
+			results.push_back( std::move(fr.ret) );
+
+			if ( fr.status == TaskStatus::Finished )
+				finished = true;
+
+			results_cond.notify_all();
+
+		} else if ( fr.status == TaskStatus::Canceled ) {
+
+			std::lock_guard<std::mutex> lock( results_mut );
+
+			canceled = true;
+			results_cond.notify_all();
+		}
+
+		return;
+	}
+
+	void Cancel()
+	{
+		canceled = true;
+		std::lock_guard<std::mutex> lock( results_mut );
+		results_cond.notify_all();
+	}
+
+	bool IsFinished() const
+	{
+		return finished || canceled;
+	}
+
+	result_type Get()
+	{
+		std::unique_lock<std::mutex> lock( results_mut );
+
+		results_cond.wait( lock, [=]() { return results.size() || finished || canceled; } );
+
+		if ( !results.size() )
+			return nullptr;
+
+		std::unique_ptr<T> res = std::move( results[0] );
+		results.erase( results.begin() );
+
+		return res;
+	}
 };
 
 template<class T>
@@ -97,23 +325,23 @@ public:
 	typename TaskResultControlBlock<T>::result_type
 	Get()
 	{
-		return ctrl->result_future.get();
+		return ctrl->Get();
 	}
 
 	bool Valid() const
 	{
-		return ctrl && ctrl->result_future.valid();
+		return ctrl && ctrl->Valid();
 	}
 
 	void Wait() const
 	{
-		return ctrl->result_future.wait();
+		return ctrl->Wait();
 	}
 
 	template<class Rep, class Period>
 	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
 	{
-		return static_cast<WaitStatus>( static_cast<int>( ctrl->result_future.wait_for( dur ) ) );
+		return ctrl->WaitFor( dur );
 	}
 };
 
@@ -132,18 +360,17 @@ struct TaskFunction
 
 	void Run()
 	{
-		if ( !ctrl )
-			ctrl = CreateControlBlock();
-
 		ctrl->Run( task_func );
+	}
 
-		// Reset the local copy of the control block to indicate finished
-		ctrl.reset();
+	void Cancel()
+	{
+		ctrl->Cancel();
 	}
 
 	bool IsFinished() const
 	{
-		return !ctrl;
+		return ctrl && ctrl->IsFinished();
 	}
 
 	TaskResult<Ret> GetResult()
@@ -263,6 +490,11 @@ public:
 	bool IsFinished() const
 	{
 		return context->IsFinished();
+	}
+
+	void Cancel()
+	{
+		context->Cancel();
 	}
 };
 

@@ -4,6 +4,8 @@
 #include "GlibExecutor.hpp"
 
 #include <iostream>
+#include <fstream>
+
 #include <atomic>
 #include <chrono>
 #include <vector>
@@ -225,10 +227,15 @@ void thread_executor_test()
 
 	auto outerfunc = [&]() {
 		std::cout << "Amazing forever.\n";
-		exec.ScheduleAfter( middlefunc, std::chrono::seconds(1) );
+		auto p = as::make_task_pair( as::Task::GenericTag{}, middlefunc );
+		mid_result = p.second;
+
+		exec.ScheduleAfter( p.first, std::chrono::seconds(1) );
 	};
 
-	exec.ScheduleAfter( outerfunc, std::chrono::seconds(2) );
+	auto pouter = as::make_task_pair( as::Task::GenericTag{}, outerfunc );
+
+	exec.ScheduleAfter( pouter.first, std::chrono::seconds(2) );
 
 	int counter = 0;
 	int iters = 969;
@@ -244,14 +251,20 @@ void thread_executor_test()
 		                      );
 	}
 
+	inner_task.Cancel();
+
 	std::this_thread::sleep_for( std::chrono::seconds(1) );
 
 	finishers.clear();
 	assert( counter == iters );
 
-	inner_result.Get();
+	pouter.second.Get();
 
-	assert( inner_done == true );
+	mid_result.Get();
+
+	//inner_result.Get();
+
+	//assert( inner_done == true );
 }
 
 void async_ptr_from_unique_ptr()
@@ -450,21 +463,82 @@ void async_ops_test()
 	assert( c.actions == ( THREAD_COUNT ) );
 }
 
+void repeated_task_test()
+{
+	as::ThreadExecutor ex;
+	int x = 0;
+
+	auto tp =
+		as::make_task_pair( as::Task::GenericTag{},
+			[&x]() -> as::TaskFuncResult<int>
+			{
+				++x;
+
+				std::cout << "Task Is Run: " << x << "\n";
+
+				if ( x < 5 )
+					return as::continuing(x);
+
+				return as::finished(x);
+			} );
+
+	ex.ScheduleAfter( tp.first, std::chrono::seconds(1) );
+
+	while( auto r = tp.second.Get() ) {
+		std::cout << "Got Result: " << *r << "\n";
+	}
+
+	assert( x == 5 );
+}
+
+void pipeline_simulation()
+{
+	as::ThreadExecutor t_stage1;
+	as::ThreadExecutor t_stage2;
+
+	auto func_stage1 = [](std::istream& is) -> as::TaskFuncResult<std::string>
+		{
+			std::string in;
+			while( std::getline(is, in) )
+				return as::continuing( in );
+
+			return as::cancel;
+		};
+
+	auto func_stage2 = [](std::string const& in) -> as::TaskFuncResult<int>
+		{
+			int s = in.size();
+
+			if ( s )
+				return as::continuing( s );
+
+			return as::finished(s);
+		};
+
+	// Broken :(
+	// auto tp_stage1 = as::make_task_pair( as::Task::GenericTag{}, func_stage1 );
+	// auto tp_stage2 = as::make_task_pair( as::Task::GenericTag{}, func_stage2 );
+}
+
 int main(int argc, char *argv[])
 {
-	foo_test();
+	// foo_test();
 
-	coro_test();
+	// coro_test();
 
-	thread_executor_test();
+	// thread_executor_test();
 
-	async_ptr_from_unique_ptr();
+	// async_ptr_from_unique_ptr();
 
-	async_ptr_init_base_from_child_test();
+	// async_ptr_init_base_from_child_test();
 
-	async_ptr_recursive_use_test();
+	// async_ptr_recursive_use_test();
 
-	async_ops_test();
+	// async_ops_test();
+
+	repeated_task_test();
+
+	pipeline_simulation();
 
 	return 0;
 }
