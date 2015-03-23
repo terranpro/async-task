@@ -16,8 +16,6 @@
 #include <vector>
 #include <functional>
 
-#include <iostream>
-
 // TODO: enable when platform boost supports context
 //#undef AS_USE_COROUTINE_TASKS
 
@@ -146,8 +144,6 @@ struct TaskResultControlBlock
 
 	void Cancel()
 	{
-		std::cout << "CANCELED!\n";
-
 		decltype(result_future) invalidate;
 		result_future = std::move(invalidate);
 	}
@@ -193,7 +189,6 @@ struct TaskResultControlBlock<void>
 
 	void Cancel()
 	{
-		std::cout << "CANCELED!\n";
 		decltype(result_future) invalidate;
 		result_future = std::move(invalidate);
 	}

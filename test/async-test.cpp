@@ -505,40 +505,47 @@ void pipeline_simulation()
 			return as::cancel;
 		};
 
-	auto func_stage2 = [](std::string const& in) -> as::TaskFuncResult<int>
+	auto func_stage2 = [](as::TaskResult< as::TaskFuncResult<std::string> > res)
+		-> as::TaskFuncResult<int>
 		{
-			int s = in.size();
+			auto in = res.Get();
 
-			if ( s )
-				return as::continuing( s );
+			if ( !in )
+				return as::cancel;
 
-			return as::finished(s);
+			int s = in->size();
+
+			return as::continuing( s );
 		};
 
-	// Broken :(
-	// auto tp_stage1 = as::make_task_pair( as::Task::GenericTag{}, func_stage1 );
-	// auto tp_stage2 = as::make_task_pair( as::Task::GenericTag{}, func_stage2 );
+	auto stage1_res = as::async( func_stage1, std::ref(std::cin) );
+
+	auto stage2_res = as::async( func_stage2, stage1_res );
+
+	while( auto out = stage2_res.Get() ) {
+		std::cout << "Got output: " << *out << "\n";
+	}
 }
 
 int main(int argc, char *argv[])
 {
-	// foo_test();
+	foo_test();
 
-	// coro_test();
+	coro_test();
 
-	// thread_executor_test();
+	thread_executor_test();
 
-	// async_ptr_from_unique_ptr();
+	async_ptr_from_unique_ptr();
 
-	// async_ptr_init_base_from_child_test();
+	async_ptr_init_base_from_child_test();
 
-	// async_ptr_recursive_use_test();
+	async_ptr_recursive_use_test();
 
-	// async_ops_test();
+	async_ops_test();
 
 	repeated_task_test();
 
-	pipeline_simulation();
+	// pipeline_simulation();
 
 	return 0;
 }
