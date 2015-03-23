@@ -190,7 +190,7 @@ struct BoostContext
 
 
 class CoroutineTaskContext
-	: public TaskContextBase
+	: public TaskContext
 {
 
 	typedef detail::simple_stack_allocator<
@@ -230,7 +230,7 @@ private:
 
 public:
 	CoroutineTaskContext()
-		: TaskContextBase(nullptr)
+		: TaskContext(nullptr)
 		, alloc()
 		, stack_size( stack_allocator::default_stacksize() )
 		, stack( alloc.allocate( stack_size ) )
@@ -241,7 +241,7 @@ public:
 	}
 
 	CoroutineTaskContext(std::unique_ptr<TaskFunctionBase> tfunc)
-		: TaskContextBase( std::move(tfunc) )
+		: TaskContext( std::move(tfunc) )
 		, alloc()
 		, stack_size( stack_allocator::default_stacksize() )
 		, stack( alloc.allocate( stack_size ) )

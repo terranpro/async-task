@@ -156,9 +156,6 @@ struct AsyncPtrSynchronizer
 	{
 		ptr.reset( new T( result.Get() ) );
 		data = ptr.get();
-
-		// data = new T( result.Get() );
-		// ptr.reset( static_cast<T *>(data) );
 	}
 };
 
@@ -186,9 +183,6 @@ struct AsyncPtrSynchronizer<T *>
 
 		ptr.reset( result.Get() );
 		data = ptr.get();
-
-		// data = result.Get();
-		// ptr.reset( static_cast<T *>(data) );
 	}
 };
 

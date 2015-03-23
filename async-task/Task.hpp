@@ -31,6 +31,8 @@ namespace as {
 template<class T>
 struct TaskResultControlBlock
 {
+	typedef T& result_type;
+
 	std::unique_ptr<T> result;
 	std::promise<T&> result_promise;
 	std::shared_future<T&> result_future;
@@ -40,11 +42,21 @@ struct TaskResultControlBlock
 		, result_promise()
 		, result_future( result_promise.get_future() )
 	{}
+
+	template<class Func>
+	void Run(Func& task_func)
+	{
+		result.reset( new T{ task_func() } );
+
+		result_promise.set_value( *result );
+	}
 };
 
 template<>
 struct TaskResultControlBlock<void>
 {
+	typedef void result_type;
+
 	std::promise<void> result_promise;
 	std::shared_future<void> result_future;
 
@@ -52,6 +64,19 @@ struct TaskResultControlBlock<void>
 		: result_promise()
 		, result_future( result_promise.get_future() )
 	{}
+
+	void Run(std::function<void()>& task_func)
+	{
+		task_func();
+
+		result_promise.set_value();
+	}
+};
+
+enum WaitStatus {
+	Deferred = static_cast<int>( std::future_status::deferred ),
+	Ready = static_cast<int>( std::future_status::ready ),
+	Timeout = static_cast<int>( std::future_status::timeout )
 };
 
 template<class T>
@@ -67,16 +92,10 @@ private:
 	{}
 
 public:
-	enum Status {
-		Deferred = static_cast<int>( std::future_status::deferred ),
-		Ready = static_cast<int>( std::future_status::ready ),
-		Timeout = static_cast<int>( std::future_status::timeout )
-	};
-
-public:
 	TaskResult() = default;
 
-	T& Get()
+	typename TaskResultControlBlock<T>::result_type
+	Get()
 	{
 		return ctrl->result_future.get();
 	}
@@ -92,40 +111,9 @@ public:
 	}
 
 	template<class Rep, class Period>
-	Status WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
+	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
 	{
-		return static_cast<Status>( static_cast<int>( ctrl->result_future.wait_for( dur ) ) );
-	}
-};
-
-template<>
-class TaskResult<void>
-{
-	std::shared_ptr< TaskResultControlBlock<void> > ctrl;
-
-	template<class U> friend struct TaskFunction;
-
-private:
-	TaskResult(std::shared_ptr< TaskResultControlBlock<void> > ctrl)
-		: ctrl(ctrl)
-	{}
-
-public:
-	TaskResult() = default;
-
-	void Get()
-	{
-		ctrl->result_future.get();
-	}
-
-	bool Valid()
-	{
-		return ctrl && ctrl->result_future.valid();
-	}
-
-	void Wait() const
-	{
-		return ctrl->result_future.wait();
+		return static_cast<WaitStatus>( static_cast<int>( ctrl->result_future.wait_for( dur ) ) );
 	}
 };
 
@@ -147,9 +135,7 @@ struct TaskFunction
 		if ( !ctrl )
 			ctrl = CreateControlBlock();
 
-		ctrl->result.reset( new Ret{ task_func() } );
-
-		ctrl->result_promise.set_value( *ctrl->result );
+		ctrl->Run( task_func );
 
 		// Reset the local copy of the control block to indicate finished
 		ctrl.reset();
@@ -172,49 +158,6 @@ private:
 	}
 };
 
-template<>
-struct TaskFunction<void>
-	: public TaskFunctionBase
-{
-	std::shared_ptr< TaskResultControlBlock<void> > ctrl;
-	std::function<void()> task_func;
-
-	template<class Func, class... Args>
-	TaskFunction( Func&& func, Args&&... args )
-		: ctrl( CreateControlBlock() )
-		, task_func( std::bind( std::forward<Func>(func), std::forward<Args>(args)... ) )
-	{}
-
-	void Run()
-	{
-		if ( !ctrl )
-			ctrl = CreateControlBlock();
-
-		task_func();
-
-		ctrl->result_promise.set_value();
-
-		// Reset the local copy of the control block to indicate finished
-		ctrl.reset();
-	}
-
-	bool IsFinished() const
-	{
-		return !ctrl;
-	}
-
-	TaskResult<void> GetResult()
-	{
-		return { ctrl };
-	}
-
-private:
-	std::shared_ptr< TaskResultControlBlock<void> > CreateControlBlock() const
-	{
-		return std::make_shared< TaskResultControlBlock<void> >();
-	}
-};
-
 template<class Func, class... Args>
 std::unique_ptr< TaskFunction<decltype( std::declval<Func>()( std::declval<Args>()... ) )> >
 make_task_function(Func&& func, Args&&... args)
@@ -232,32 +175,7 @@ make_task_function(Func&& func, Args&&... args)
 class Task
 {
 private:
-	class GenericTaskContext
-		: public TaskContextBase
-	{
-	public:
-		GenericTaskContext()
-			: TaskContextBase( nullptr )
-		{}
-
-		GenericTaskContext(std::unique_ptr<TaskFunctionBase> te)
-			: TaskContextBase( std::move(te) )
-		{}
-
-		void Invoke()
-		{
-			if (taskfunc)
-				taskfunc->Run();
-		}
-
-		void Yield()
-		{
-			// TODO: do nothing
-		}
-	};
-
-private:
-	std::shared_ptr<TaskContextBase> context;
+	std::shared_ptr<TaskContext> context;
 
 public:
 	struct GenericTag {};
@@ -276,7 +194,7 @@ public:
 	                                           >::type >
 
 	Task(Func&& func, Args&&... args)
-		: context{ std::make_shared<GenericTaskContext>(
+		: context{ std::make_shared<TaskContext>(
 			         make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) }
 	{}
 
@@ -288,19 +206,19 @@ public:
 	                                           >::type
 	        >
 	Task(std::unique_ptr<TFunc> tf)
-		: context( std::make_shared<GenericTaskContext>(std::move(tf)) )
+		: context( std::make_shared<TaskContext>(std::move(tf)) )
 	{}
 
 	// Explicitly Generic
 	template<class Func, class... Args>
 	Task(GenericTag, Func&& func, Args&&... args)
-		: context{ std::make_shared<GenericTaskContext>(
+		: context{ std::make_shared<TaskContext>(
 			make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) }
 	{}
 
 	template<class TFunc>
 	Task(GenericTag, std::unique_ptr<TFunc> tf)
-		: context( std::make_shared<GenericTaskContext>( std::move(tf) ) )
+		: context( std::make_shared<TaskContext>( std::move(tf) ) )
 	{}
 
 #ifdef AS_USE_COROUTINE_TASKS

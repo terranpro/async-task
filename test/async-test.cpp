@@ -412,6 +412,10 @@ void async_ptr_init_base_from_child_test()
 	as::AsyncPtr<base> aptr12 = as::async( [=]() {
 			return factory_func();
 		} );
+
+	as::ThreadExecutor e;
+	auto aptr13 = as::make_async<base>( e, factory_func );
+	aptr13->action();
 }
 
 void async_ptr_recursive_use_test()

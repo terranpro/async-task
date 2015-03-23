@@ -15,30 +15,43 @@
 
 namespace as {
 
-class TaskContext
+class TaskContextBase
 {
 public:
-	virtual ~TaskContext() {}
+	virtual ~TaskContextBase() {}
 
 	virtual void Invoke() = 0;
 	virtual void Yield() = 0;
 };
 
-class TaskContextBase
-	: public TaskContext
+class TaskContext
+	: public TaskContextBase
 {
 protected:
 	std::unique_ptr<TaskFunctionBase> taskfunc;
 
-	TaskContextBase(std::unique_ptr<TaskFunctionBase> func)
+public:
+	TaskContext() = default;
+
+	TaskContext(std::unique_ptr<TaskFunctionBase> func)
 		: taskfunc(std::move(func))
 	{}
 
-public:
+	virtual ~TaskContext()
+	{}
+
 	bool IsFinished() const
 	{
 		return taskfunc->IsFinished();
 	}
+
+	virtual void Invoke()
+	{
+		taskfunc->Run();
+	}
+
+	virtual void Yield()
+	{}
 };
 
 } // namespace as
