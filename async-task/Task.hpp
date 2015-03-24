@@ -116,18 +116,68 @@ enum WaitStatus {
 	Timeout = static_cast<int>( std::future_status::timeout )
 };
 
+template<class Ret>
+struct TaskResultControlBlockBase
+{
+	typedef Ret& result_type;
+	typedef Ret& reference_type;
+
+	std::unique_ptr<Ret> result;
+
+	template<class Func, class Promise>
+	void RunHelper( Func& task_func, Promise& promise )
+	{
+		result.reset( new Ret{ task_func() } );
+		promise.set_value( *result );
+	}
+
+	bool IsSet() const
+	{
+		return result != nullptr;
+	}
+};
+
+template<>
+struct TaskResultControlBlockBase<void>
+{
+	typedef void result_type;
+	typedef void reference_type;
+
+	std::atomic<bool> is_set;
+
+	TaskResultControlBlockBase()
+		: is_set(false)
+	{}
+
+	template<class Func, class Promise>
+	void RunHelper( Func& task_func, Promise& promise )
+	{
+		task_func();
+
+		promise.set_value();
+		is_set = true;
+	}
+
+	bool IsSet() const
+	{
+		return is_set;
+	}
+};
+
 template<class T>
 struct TaskResultControlBlock
+	: public TaskResultControlBlockBase<T>
 {
-	typedef T& result_type;
+	typedef TaskResultControlBlockBase<T> base_type;
 
-	std::unique_ptr<T> result;
-	std::promise<T&> result_promise;
-	std::shared_future<T&> result_future;
+	typedef typename base_type::result_type result_type;
+	typedef typename base_type::reference_type reference_type;
+
+	std::promise<reference_type> result_promise;
+	std::shared_future<reference_type> result_future;
 
 	TaskResultControlBlock()
-		: result()
-		, result_promise()
+		: result_promise()
 		, result_future( result_promise.get_future() )
 	{}
 
@@ -137,9 +187,7 @@ struct TaskResultControlBlock
 		if ( IsFinished() )
 			return;
 
-		result.reset( new T{ task_func() } );
-
-		result_promise.set_value( *result );
+		base_type::RunHelper( task_func, result_promise );
 	}
 
 	void Cancel()
@@ -155,7 +203,7 @@ struct TaskResultControlBlock
 
 	bool IsFinished() const
 	{
-		return Valid() == false || result != nullptr;
+		return Valid() == false || base_type::IsSet();
 	}
 
 	result_type Get()
@@ -175,72 +223,12 @@ struct TaskResultControlBlock
 	}
 };
 
-template<>
-struct TaskResultControlBlock<void>
-{
-	typedef void result_type;
-
-	std::promise<void> result_promise;
-	std::shared_future<void> result_future;
-
-	TaskResultControlBlock()
-		: result_promise()
-		, result_future( result_promise.get_future() )
-	{}
-
-	void Run(std::function<void()>& task_func)
-	{
-		if ( IsFinished() )
-			return;
-
-		task_func();
-
-		result_promise.set_value();
-	}
-
-	void Cancel()
-	{
-		decltype(result_future) invalidate;
-		result_future = std::move(invalidate);
-	}
-
-	bool Valid() const
-	{
-		return result_future.valid();
-	}
-
-	bool IsFinished() const
-	{
-		if ( !Valid() )
-			return true;
-
-		return ( result_future.wait_for( std::chrono::nanoseconds(0) )
-		         == std::future_status::ready );
-	}
-
-	void Get()
-	{
-		result_future.get();
-	}
-
-	void Wait()
-	{
-		result_future.wait();
-	}
-
-	template<class Rep, class Period>
-	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
-	{
-		return static_cast<WaitStatus>( static_cast<int>( result_future.wait_for( dur ) ) );
-	}
-};
-
 template<class T>
 struct TaskResultControlBlock< TaskFuncResult<T> >
 {
 	typedef std::unique_ptr<T> result_type;
 
-	std::vector< std::unique_ptr<T> > results;
+	std::vector< result_type > results;
 	std::mutex results_mut;
 	std::condition_variable results_cond;
 	std::atomic<bool> finished;
@@ -281,8 +269,6 @@ struct TaskResultControlBlock< TaskFuncResult<T> >
 			canceled = true;
 			results_cond.notify_all();
 		}
-
-		return;
 	}
 
 	void Cancel()
@@ -306,7 +292,7 @@ struct TaskResultControlBlock< TaskFuncResult<T> >
 		if ( !results.size() )
 			return nullptr;
 
-		std::unique_ptr<T> res = std::move( results[0] );
+		result_type res = std::move( results[0] );
 		results.erase( results.begin() );
 
 		return res;
