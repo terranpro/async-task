@@ -470,22 +470,22 @@ void repeated_task_test()
 
 	auto tp =
 		as::make_task_pair( as::Task::GenericTag{},
-			[&x]() -> as::TaskFuncResult<int>
+			[&x]() -> as::TaskFuncResult<void>
 			{
 				++x;
 
 				std::cout << "Task Is Run: " << x << "\n";
 
 				if ( x < 5 )
-					return as::continuing(x);
+					return as::continuing();
 
-				return as::finished(x);
+				return as::finished();
 			} );
 
 	ex.ScheduleAfter( tp.first, std::chrono::seconds(1) );
 
-	while( auto r = tp.second.Get() ) {
-		std::cout << "Got Result: " << *r << "\n";
+	while( tp.second.Get() ) {
+		std::cout << "Got Result: " << "\n";
 	}
 
 	assert( x == 5 );
@@ -499,8 +499,10 @@ void pipeline_simulation()
 	auto func_stage1 = [](std::istream& is) -> as::TaskFuncResult<std::string>
 		{
 			std::string in;
-			while( std::getline(is, in) )
+			while( std::getline(is, in) ) {
+				std::cout << "got txt: " << in << "\n";
 				return as::continuing( in );
+			}
 
 			return as::cancel;
 		};
@@ -508,7 +510,9 @@ void pipeline_simulation()
 	auto func_stage2 = [](as::TaskResult< as::TaskFuncResult<std::string> > res)
 		-> as::TaskFuncResult<int>
 		{
+			std::cout << "Stage2 Get PRE\n";
 			auto in = res.Get();
+			std::cout << "Stage2 Get POST\n";
 
 			if ( !in )
 				return as::cancel;
@@ -520,7 +524,7 @@ void pipeline_simulation()
 
 	auto stage1_res = as::async( func_stage1, std::ref(std::cin) );
 
-	auto stage2_res = as::async( func_stage2, stage1_res );
+	auto stage2_res = as::async( t_stage2, func_stage2, stage1_res );
 
 	while( auto out = stage2_res.Get() ) {
 		std::cout << "Got output: " << *out << "\n";
@@ -529,21 +533,21 @@ void pipeline_simulation()
 
 int main(int argc, char *argv[])
 {
-	foo_test();
+	// foo_test();
 
-	coro_test();
+	// coro_test();
 
-	thread_executor_test();
+	// thread_executor_test();
 
-	async_ptr_from_unique_ptr();
+	// async_ptr_from_unique_ptr();
 
-	async_ptr_init_base_from_child_test();
+	// async_ptr_init_base_from_child_test();
 
-	async_ptr_recursive_use_test();
+	// async_ptr_recursive_use_test();
 
-	async_ops_test();
+	// async_ops_test();
 
-	repeated_task_test();
+	// repeated_task_test();
 
 	pipeline_simulation();
 

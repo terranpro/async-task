@@ -11,7 +11,7 @@
 #ifndef AS_ASYNC_HPP
 #define AS_ASYNC_HPP
 
-// #include "GlibExecutor.hpp"
+#include "GlibExecutor.hpp"
 #include "ThreadExecutor.hpp"
 
 #include <atomic>
@@ -67,8 +67,8 @@ async(Func&& func, Args&&... args)
 	// TODO: examine why launching 48+ GlibExecutor's might deadlock on
 	// Cygwin; replaced default with ThreadExecutor's to start
 
-	//GlibExecutor c;
-	ThreadExecutor c;
+	GlibExecutor c;
+	//ThreadExecutor c;
 
 	return async( c,
 	              std::forward<Func>(func),

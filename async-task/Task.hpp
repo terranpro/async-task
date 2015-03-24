@@ -21,100 +21,14 @@
 
 #include "TaskContext.hpp"
 #include "TaskFunction.hpp"
+#include "TaskStatus.hpp"
+#include "Channel.hpp"
 
 #ifdef AS_USE_COROUTINE_TASKS
 #include "CoroutineTaskContext.hpp"
 #endif // AS_USE_COROUTINE_TASKS
 
 namespace as {
-
-enum class TaskStatus {
-	Finished,
-	Repeat,
-	Continuing,
-	Canceled
-};
-
-template<class T>
-struct TaskFuncResult;
-
-template<>
-struct TaskFuncResult<void>;
-
-template<>
-struct TaskFuncResult<void>
-{
-	TaskStatus status;
-
-	TaskFuncResult()
-		: status()
-	{}
-
-	TaskFuncResult(TaskStatus s)
-		: status(s)
-	{}
-
-	template<class U>
-	operator TaskFuncResult<U>()
-	{
-		return TaskFuncResult<U>(*this);
-	}
-};
-
-template<class T>
-struct TaskFuncResult
-{
-	TaskStatus status;
-	std::unique_ptr<T> ret;
-
-	TaskFuncResult()
-		: status()
-		, ret()
-	{}
-
-	TaskFuncResult(TaskStatus s)
-		: status(s)
-		, ret()
-	{}
-
-	TaskFuncResult(TaskStatus s, T val)
-		: status(s)
-		, ret( new T{ val } )
-	{}
-
-	explicit TaskFuncResult(T val)
-		: status()
-		, ret( new T{ val } )
-	{}
-
-	TaskFuncResult(TaskFuncResult<void> const& other)
-		: status(other.status)
-		, ret()
-	{}
-};
-
-static const TaskFuncResult<void> repeat{ TaskStatus::Repeat };
-static const TaskFuncResult<void> cancel{ TaskStatus::Canceled };
-
-template<class T>
-TaskFuncResult< typename std::remove_reference<T>::type >
-finished(T&& res)
-{
-	return TaskFuncResult< typename std::remove_reference<T>::type >( TaskStatus::Finished, std::forward<T>(res) );
-}
-
-template<class T>
-TaskFuncResult< typename std::remove_reference<T>::type >
-continuing(T&& res)
-{
-	return TaskFuncResult< typename std::remove_reference<T>::type >( TaskStatus::Continuing, std::forward<T>(res) );
-}
-
-enum WaitStatus {
-	Deferred = static_cast<int>( std::future_status::deferred ),
-	Ready = static_cast<int>( std::future_status::ready ),
-	Timeout = static_cast<int>( std::future_status::timeout )
-};
 
 template<class Ret>
 struct TaskResultControlBlockBase
@@ -226,26 +140,16 @@ struct TaskResultControlBlock
 template<class T>
 struct TaskResultControlBlock< TaskFuncResult<T> >
 {
-	typedef std::unique_ptr<T> result_type;
+	typedef typename Channel<T>::result_type result_type;
 
-	std::vector< result_type > results;
-	std::mutex results_mut;
-	std::condition_variable results_cond;
-	std::atomic<bool> finished;
-	std::atomic<bool> canceled;
+	Channel<T> channel;
 
-	TaskResultControlBlock()
-		: results()
-		, results_mut()
-		, results_cond()
-		, finished(false)
-		, canceled(false)
-	{}
+	TaskResultControlBlock() = default;
 
 	template<class Func>
 	void Run(Func& task_func)
 	{
-		if ( canceled )
+		if ( !channel.IsOpen() )
 			return;
 
 		TaskFuncResult<T> fr = task_func();
@@ -253,74 +157,42 @@ struct TaskResultControlBlock< TaskFuncResult<T> >
 		if ( fr.status == TaskStatus::Finished ||
 		     fr.status == TaskStatus::Continuing ) {
 
-			std::lock_guard<std::mutex> lock( results_mut );
-
-			results.push_back( std::move(fr.ret) );
+			channel.Put( std::move(fr) );
 
 			if ( fr.status == TaskStatus::Finished )
-				finished = true;
-
-			results_cond.notify_all();
+				channel.Close();
 
 		} else if ( fr.status == TaskStatus::Canceled ) {
 
-			std::lock_guard<std::mutex> lock( results_mut );
-
-			canceled = true;
-			results_cond.notify_all();
+			channel.Cancel();
 		}
 	}
 
 	void Cancel()
 	{
-		canceled = true;
-		std::lock_guard<std::mutex> lock( results_mut );
-		results_cond.notify_all();
+		channel.Cancel();
 	}
 
 	bool IsFinished() const
 	{
-		return finished || canceled;
+		return !channel.IsOpen();
 	}
 
-	result_type Get()
+	result_type
+	Get()
 	{
-		std::unique_lock<std::mutex> lock( results_mut );
-
-		results_cond.wait( lock, [=]() { return WaitConditionLocked(); } );
-
-		if ( !results.size() )
-			return nullptr;
-
-		result_type res = std::move( results[0] );
-		results.erase( results.begin() );
-
-		return res;
+		return channel.Get();
 	}
 
 	void Wait()
 	{
-		std::unique_lock<std::mutex> lock( results_mut );
-
-		results_cond.wait( lock, [=]() { return WaitConditionLocked(); } );
+		channel.Wait();
 	}
 
 	template<class Rep, class Period>
 	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
 	{
-		std::unique_lock<std::mutex> lock( results_mut );
-
-		auto waitres = results_cond.wait_for( lock, dur, [=]() { return WaitConditionLocked(); } );
-
-		return waitres == std::cv_status::timeout
-			? WaitStatus::Timeout
-			: WaitStatus::Ready;
-	}
-
-private:
-	bool WaitConditionLocked() const
-	{
-		return results.size() || finished || canceled;
+		return channel.WaitFor( dur );
 	}
 };
 
