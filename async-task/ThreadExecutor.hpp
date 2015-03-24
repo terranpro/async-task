@@ -147,16 +147,24 @@ private:
 	std::vector<TaskInfo>
 	WaitForTasks()
 	{
-		auto wakeup_condition = [&]() {
-			return task_queue.size() > 0 || quit_requested;
-		};
-
 		std::unique_lock<std::mutex> lock{ task_mut };
 
-		if ( min_sleep_interval > Interval(0) )
-			cond.wait_for( lock, min_sleep_interval, wakeup_condition );
-		else
-			cond.wait( lock, wakeup_condition );
+		auto cur_size = task_queue.size();
+		auto wakeup_time = Clock::now() + min_sleep_interval;
+
+		if ( min_sleep_interval > Interval(0) ) {
+			cond.wait_for( lock, min_sleep_interval,
+			               [&]() {
+				               return ( task_queue.size() > cur_size
+				                        || Clock::now() > wakeup_time
+				                        || quit_requested );
+			               } );
+		} else {
+			cond.wait( lock,
+			           [&]() {
+				           return task_queue.size() > 0 || quit_requested;
+			           } );
+		}
 
 		if ( task_queue.size() == 0 )
 			return {};
