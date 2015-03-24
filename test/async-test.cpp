@@ -178,14 +178,14 @@ void coro_test()
 					std::cout << ".";
 					std::cout.flush();
 					std::this_thread::sleep_for( std::chrono::milliseconds(1) );
-					as::ThisTask::Yield();
+					as::this_task::yield();
 				}
 			} );
 
 	as::await( ctxt, [&]() {
 			std::cout << "Awaiting...!\n";
 
-			as::ThisTask::Yield();
+			as::this_task::yield();
 
 			as::await( []() {
 					std::cout << "Start sleep...\n";
@@ -545,7 +545,7 @@ int main(int argc, char *argv[])
 
 	repeated_task_test();
 
-	// pipeline_simulation();
+	pipeline_simulation();
 
 	return 0;
 }

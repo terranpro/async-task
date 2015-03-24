@@ -272,9 +272,9 @@ public:
 	}
 };
 
-namespace ThisTask {
+namespace this_task {
 
-inline void Yield()
+inline void yield()
 {
 	if ( detail::this_task_stack.size() == 0 )
 		return;

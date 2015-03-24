@@ -162,6 +162,17 @@ struct TaskResultControlBlock
 	{
 		return result_future.get();
 	}
+
+	void Wait()
+	{
+		result_future.wait();
+	}
+
+	template<class Rep, class Period>
+	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
+	{
+		return static_cast<WaitStatus>( static_cast<int>( result_future.wait_for( dur ) ) );
+	}
 };
 
 template<>
@@ -290,7 +301,7 @@ struct TaskResultControlBlock< TaskFuncResult<T> >
 	{
 		std::unique_lock<std::mutex> lock( results_mut );
 
-		results_cond.wait( lock, [=]() { return results.size() || finished || canceled; } );
+		results_cond.wait( lock, [=]() { return WaitConditionLocked(); } );
 
 		if ( !results.size() )
 			return nullptr;
@@ -299,6 +310,31 @@ struct TaskResultControlBlock< TaskFuncResult<T> >
 		results.erase( results.begin() );
 
 		return res;
+	}
+
+	void Wait()
+	{
+		std::unique_lock<std::mutex> lock( results_mut );
+
+		results_cond.wait( lock, [=]() { return WaitConditionLocked(); } );
+	}
+
+	template<class Rep, class Period>
+	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
+	{
+		std::unique_lock<std::mutex> lock( results_mut );
+
+		auto waitres = results_cond.wait_for( lock, dur, [=]() { return WaitConditionLocked(); } );
+
+		return waitres == std::cv_status::timeout
+			? WaitStatus::Timeout
+			: WaitStatus::Ready;
+	}
+
+private:
+	bool WaitConditionLocked() const
+	{
+		return results.size() || finished || canceled;
 	}
 };
 
