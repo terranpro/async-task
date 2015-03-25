@@ -27,8 +27,7 @@
 
 namespace as {
 
-class ThreadExecutor
-	: public Executor
+class ThreadExecutorImpl
 {
 	typedef std::chrono::high_resolution_clock Clock;
 	typedef std::chrono::time_point<Clock> TimePoint;
@@ -55,7 +54,7 @@ class ThreadExecutor
 	Interval min_sleep_interval;
 
 public:
-	ThreadExecutor()
+	ThreadExecutorImpl()
 		: thr()
 		, task_mut()
 		, task_queue()
@@ -63,10 +62,10 @@ public:
 		, quit_requested(false)
 		, min_sleep_interval(-1)
 	{
-		thr = std::thread( &ThreadExecutor::ThreadEntryPoint, this );
+		thr = std::thread( &ThreadExecutorImpl::ThreadEntryPoint, this );
 	}
 
-	~ThreadExecutor()
+	~ThreadExecutorImpl()
 	{
 		{
 			std::unique_lock<std::mutex> lock{ task_mut };
@@ -119,31 +118,12 @@ private:
 			if ( tasks.size() == 0 )
 				continue;
 
-			auto next_tasks = ProcessTasks( tasks );
+			auto next_tasks = ProcessTasks( std::move(tasks) );
 
 			EnqueueRemaining( std::move(next_tasks) );
 		}
 
-		// TODO: refactor this nicely
-		// before exiting the thread, run any tasks left in queue
-		std::vector<TaskInfo> tasks;
-
-		for ( std::unique_lock<std::mutex> lock{ task_mut };
-		      task_queue.size() != 0 || tasks.size() != 0;
-		    )
-		{
-			if ( task_queue.size() )
-				std::move( task_queue.begin(), task_queue.end(), std::back_inserter(tasks) );
-			task_queue.clear();
-
-			assert( task_queue.size() == 0 );
-
-			lock.unlock();
-
-			tasks = ProcessTasks( tasks );
-
-			lock.lock();
-		}
+		ProcessRemainingTasks();
 	}
 
 	std::vector<TaskInfo>
@@ -175,9 +155,9 @@ private:
 	}
 
 	std::vector<TaskInfo>
-	ProcessTasks( std::vector<TaskInfo> tasks ) const
+	ProcessTasks( std::vector<TaskInfo>&& tasks ) const
 	{
-		decltype(tasks) next_tasks;
+		std::vector<TaskInfo> next_tasks;
 
 		for( auto& cur_info : tasks ) {
 			if( cur_info.interval_ms > Interval(0) && Clock::now() < cur_info.next_invocation ) {
@@ -199,7 +179,7 @@ private:
 		return next_tasks;
 	}
 
-	void EnqueueRemaining( std::vector<TaskInfo> next_tasks )
+	void EnqueueRemaining( std::vector<TaskInfo>&& next_tasks )
 	{
 		std::unique_lock<std::mutex> lock{ task_mut };
 
@@ -219,6 +199,68 @@ private:
 			return;
 
 		min_sleep_interval = min_interval_it->interval_ms;
+	}
+
+	void ProcessRemainingTasks()
+	{
+		// TODO: refactor this nicely
+		// before exiting the thread, run any tasks left in queue
+		std::vector<TaskInfo> tasks;
+
+		for ( std::unique_lock<std::mutex> lock{ task_mut };
+		      task_queue.size() != 0 || tasks.size() != 0;
+		    )
+		{
+			if ( task_queue.size() )
+				std::move( task_queue.begin(), task_queue.end(), std::back_inserter(tasks) );
+			task_queue.clear();
+
+			assert( task_queue.size() == 0 );
+
+			lock.unlock();
+
+			tasks = ProcessTasks( std::move(tasks) );
+
+			lock.lock();
+		}
+	}
+};
+
+class ThreadExecutor
+	: public Executor
+{
+	typedef std::chrono::high_resolution_clock Clock;
+	typedef std::chrono::time_point<Clock> TimePoint;
+	typedef std::chrono::milliseconds Interval;
+
+	std::shared_ptr<ThreadExecutorImpl> impl;
+
+public:
+	ThreadExecutor()
+		: impl( std::make_shared<ThreadExecutorImpl>() )
+	{}
+
+	ThreadExecutor(ThreadExecutor const&) = default;
+	ThreadExecutor& operator=(ThreadExecutor const&) = default;
+
+	void Schedule(Task task)
+	{
+		impl->Schedule(std::move(task));
+	}
+
+	void ScheduleAfter(Task task, std::chrono::milliseconds time_ms)
+	{
+		impl->ScheduleAfter(std::move(task), time_ms);
+	}
+
+	void Iteration()
+	{
+		impl->Iteration();
+	}
+
+	bool IsCurrent()
+	{
+		return impl->IsCurrent();
 	}
 };
 

@@ -93,6 +93,13 @@ struct Channel
 		results_cond.wait( lock, [=]() { return WaitConditionLocked(); } );
 	}
 
+	size_t Count() const
+	{
+		std::unique_lock<std::mutex> lock( results_mut );
+
+		return results.size();
+	}
+
 	template<class Rep, class Period>
 	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
 	{

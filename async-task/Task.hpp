@@ -69,7 +69,7 @@ public:
 class Task
 {
 private:
-	std::shared_ptr<TaskImpl> context;
+	std::shared_ptr<TaskImpl> impl;
 
 public:
 	struct GenericTag {};
@@ -88,7 +88,7 @@ public:
 	                                           >::type >
 
 	Task(Func&& func, Args&&... args)
-		: context{ std::make_shared<TaskImpl>(
+		: impl{ std::make_shared<TaskImpl>(
 			         make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) }
 	{}
 
@@ -100,26 +100,26 @@ public:
 	                                           >::type
 	        >
 	Task(std::unique_ptr<TFunc> tf)
-		: context( std::make_shared<TaskImpl>(std::move(tf)) )
+		: impl( std::make_shared<TaskImpl>(std::move(tf)) )
 	{}
 
 	// Explicitly Generic
 	template<class Func, class... Args>
 	Task(GenericTag, Func&& func, Args&&... args)
-		: context{ std::make_shared<TaskImpl>(
+		: impl{ std::make_shared<TaskImpl>(
 			make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) }
 	{}
 
 	template<class TFunc>
 	Task(GenericTag, std::unique_ptr<TFunc> tf)
-		: context( std::make_shared<TaskImpl>( std::move(tf) ) )
+		: impl( std::make_shared<TaskImpl>( std::move(tf) ) )
 	{}
 
 #ifdef AS_USE_COROUTINE_TASKS
 	// Explicity Coroutine
 	template<class Func, class... Args>
 	Task(CoroutineTag, Func&& func, Args&&... args)
-		: context( std::make_shared<CoroutineTaskImpl>(
+		: impl( std::make_shared<CoroutineTaskImpl>(
 			           make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) )
 	{}
 
@@ -132,7 +132,7 @@ public:
 	                                           >::type
 	        >
 	Task(CoroutineTag, std::unique_ptr<TFunc> tf)
-		: context( std::make_shared<CoroutineTaskImpl>( std::move(tf) ) )
+		: impl( std::make_shared<CoroutineTaskImpl>( std::move(tf) ) )
 	{}
 #endif // AS_USE_COROUTINE_TASKS
 
@@ -146,22 +146,22 @@ public:
 
 	void Invoke()
 	{
-		context->Invoke();
+		impl->Invoke();
 	}
 
 	void Yield()
 	{
-		context->Yield();
+		impl->Yield();
 	}
 
 	bool IsFinished() const
 	{
-		return context->IsFinished();
+		return impl->IsFinished();
 	}
 
 	void Cancel()
 	{
-		context->Cancel();
+		impl->Cancel();
 	}
 };
 
