@@ -443,7 +443,7 @@ void async_ptr_recursive_use_test()
 
 void async_ops_test()
 {
-	const int THREAD_COUNT = 64;
+	const int THREAD_COUNT = 128;
 	child c;
 	{
 		as::ThreadExecutor child_ctxt;
@@ -455,6 +455,8 @@ void async_ops_test()
 							c.action();
 						} );
 				} );
+
+			results.emplace_back( r );
 		}
 
 		results.clear();
@@ -545,11 +547,11 @@ int main(int argc, char *argv[])
 
 	// async_ptr_recursive_use_test();
 
-	// async_ops_test();
+	async_ops_test();
 
 	// repeated_task_test();
 
-	pipeline_simulation();
+	// pipeline_simulation();
 
 	return 0;
 }

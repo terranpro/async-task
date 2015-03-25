@@ -30,11 +30,14 @@ std::pair<
         >
 make_task_pair(TaskTag, Func&& func, Args&&... args)
 {
+	typedef decltype( std::declval<Func>()(std::declval<Args>()...) )
+		result_type;
+
 	auto tf = make_task_function( std::forward<Func>(func),
 	                              std::forward<Args>(args)... );
-	auto result = tf->GetResult();
 
-	return std::make_pair( Task{ TaskTag{}, std::move(tf) }, result );
+	return std::make_pair( Task{ TaskTag{}, std::move(tf) },
+	                       TaskResult<result_type>{ tf->GetControlBlock() } );
 }
 
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext
@@ -221,11 +224,6 @@ public:
 	AsyncPtr()
 		: ptr()
 		, impl()
-	{}
-
-	AsyncPtr( TaskResult<T> res )
-		: ptr()
-		, impl( std::make_shared< AsyncPtrSynchronizer<T> >(res) )
 	{}
 
 	AsyncPtr( std::unique_ptr<T> uptr )

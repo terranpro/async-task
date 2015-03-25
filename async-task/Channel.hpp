@@ -20,12 +20,6 @@
 
 namespace as {
 
-enum WaitStatus {
-	Deferred = static_cast<int>( std::future_status::deferred ),
-	Ready = static_cast<int>( std::future_status::ready ),
-	Timeout = static_cast<int>( std::future_status::timeout )
-};
-
 template<class T>
 struct Channel
 {
