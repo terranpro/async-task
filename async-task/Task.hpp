@@ -173,6 +173,11 @@ struct TaskResultControlBlock< TaskFuncResult<T> >
 		channel.Cancel();
 	}
 
+	bool Valid() const
+	{
+		return channel.IsOpen();
+	}
+
 	bool IsFinished() const
 	{
 		return !channel.IsOpen();
