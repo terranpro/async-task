@@ -15,7 +15,6 @@
 #include <type_traits>
 
 namespace as {
-inline namespace v1 {
 
 enum WaitStatus {
 	Deferred = static_cast<int>( std::future_status::deferred ),
@@ -89,6 +88,7 @@ struct TaskFuncResult
 };
 
 static const TaskFuncResult<void> repeat{ TaskStatus::Repeat };
+
 static const TaskFuncResult<void> cancel{ TaskStatus::Canceled };
 
 template<class T>
@@ -117,7 +117,6 @@ continuing()
 	return TaskFuncResult<void>( TaskStatus::Continuing );
 }
 
-} // inline namespace as::v1
 } // namespace as
 
 #endif // AS_TASK_STATUS_HPP

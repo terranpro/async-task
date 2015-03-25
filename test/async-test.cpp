@@ -551,7 +551,7 @@ int main(int argc, char *argv[])
 
 	repeated_task_test();
 
-	pipeline_simulation();
+	// pipeline_simulation();
 
 	return 0;
 }

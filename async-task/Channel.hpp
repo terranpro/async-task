@@ -21,7 +21,7 @@
 namespace as {
 
 template<class T>
-struct Channel
+struct ChannelImpl
 {
 	typedef std::unique_ptr<T> result_type;
 
@@ -31,7 +31,7 @@ struct Channel
 	std::atomic<bool> finished;
 	std::atomic<bool> canceled;
 
-	Channel()
+	ChannelImpl()
 		: results()
 		, results_mut()
 		, results_cond()
@@ -120,7 +120,7 @@ private:
 };
 
 template<>
-struct Channel<void>
+struct ChannelImpl<void>
 {
 	typedef bool result_type;
 
@@ -130,7 +130,7 @@ struct Channel<void>
 	std::atomic<bool> finished;
 	std::atomic<bool> canceled;
 
-	Channel()
+	ChannelImpl()
 		: results()
 		, results_mut()
 		, results_cond()
@@ -204,6 +204,62 @@ private:
 	bool WaitConditionLocked() const
 	{
 		return results.size() || finished || canceled;
+	}
+};
+
+template<class T>
+class Channel
+{
+	std::shared_ptr< ChannelImpl<T> > impl;
+
+public:
+	typedef typename ChannelImpl<T>::result_type result_type;
+
+public:
+	Channel()
+		: impl( std::make_shared< ChannelImpl<T> >() )
+	{}
+
+	bool IsOpen() const
+	{
+		return impl->IsOpen();
+	}
+
+	void Put(TaskFuncResult<T> tfr)
+	{
+		impl->Put( std::move(tfr) );
+	}
+
+	result_type
+	Get()
+	{
+		return impl->Get();
+	}
+
+	void Ping()
+	{
+		impl->Ping();
+	}
+
+	void Cancel()
+	{
+		impl->Cancel();
+	}
+
+	void Close()
+	{
+		impl->Close();
+	}
+
+	void Wait()
+	{
+		impl->Wait();
+	}
+
+	template<class Rep, class Period>
+	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
+	{
+		return impl->WaitFor( dur );
 	}
 };
 
