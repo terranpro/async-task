@@ -37,11 +37,13 @@ class ThreadExecutor
 	struct TaskInfo
 	{
 		Task task;
-		TimePoint next_invocation{};
-		Interval interval_ms{0};
+		TimePoint next_invocation;
+		Interval interval_ms;
 
 		TaskInfo(Task task)
 			: task(task)
+			, next_invocation()
+			, interval_ms(0)
 		{}
 	};
 

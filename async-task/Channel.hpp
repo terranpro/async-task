@@ -1,5 +1,5 @@
 //
-//  Task.hpp - Asynchronous Tasks and TaskResult<>'s
+//  Channel.hpp - Multiple Result Channel/Queue
 //
 //  Copyright (c) 2015 Brian Fransioli
 //

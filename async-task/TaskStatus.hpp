@@ -1,3 +1,13 @@
+//
+//  TaskStatus.hpp - Result Status for Multi-run Tasks
+//
+//  Copyright (c) 2015 Brian Fransioli
+//
+//  Distributed under the Boost Software License, Version 1.0.
+//  See accompanying file LICENSE_1_0.txt or copy at
+//  http://www.boost.org/LICENSE_1_0.txt
+//
+
 #ifndef AS_TASK_STATUS_HPP
 #define AS_TASK_STATUS_HPP
 
@@ -5,6 +15,7 @@
 #include <type_traits>
 
 namespace as {
+inline namespace v1 {
 
 enum class TaskStatus {
 	Finished,
@@ -75,31 +86,32 @@ static const TaskFuncResult<void> repeat{ TaskStatus::Repeat };
 static const TaskFuncResult<void> cancel{ TaskStatus::Canceled };
 
 template<class T>
-TaskFuncResult< typename std::remove_reference<T>::type >
+inline TaskFuncResult< typename std::remove_reference<T>::type >
 finished(T&& res)
 {
 	return TaskFuncResult< typename std::remove_reference<T>::type >( TaskStatus::Finished, std::forward<T>(res) );
 }
 
-TaskFuncResult<void>
+inline TaskFuncResult<void>
 finished()
 {
 	return TaskFuncResult<void>( TaskStatus::Finished );
 }
 
 template<class T>
-TaskFuncResult< typename std::remove_reference<T>::type >
+inline TaskFuncResult< typename std::remove_reference<T>::type >
 continuing(T&& res)
 {
 	return TaskFuncResult< typename std::remove_reference<T>::type >( TaskStatus::Continuing, std::forward<T>(res) );
 }
 
-TaskFuncResult<void>
+inline TaskFuncResult<void>
 continuing()
 {
 	return TaskFuncResult<void>( TaskStatus::Continuing );
 }
 
+} // inline namespace as::v1
 } // namespace as
 
 #endif // AS_TASK_STATUS_HPP
