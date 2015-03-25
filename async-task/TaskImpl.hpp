@@ -1,5 +1,5 @@
 //
-//  TaskContext.hpp - Task Context abstraction
+//  TaskImpl.hpp - Basic Task Context/Implementation
 //
 //  Copyright (c) 2015 Brian Fransioli
 //
@@ -8,37 +8,37 @@
 //  http://www.boost.org/LICENSE_1_0.txt
 //
 
-#ifndef AS_TASK_CONTEXT_HPP
-#define AS_TASK_CONTEXT_HPP
+#ifndef AS_TASK_IMPL_HPP
+#define AS_TASK_IMPL_HPP
 
 #include "TaskFunction.hpp"
 
 namespace as {
 
-class TaskContextBase
+class TaskImplBase
 {
 public:
-	virtual ~TaskContextBase() {}
+	virtual ~TaskImplBase() {}
 
 	virtual void Invoke() = 0;
 	virtual void Yield() = 0;
 	virtual void Cancel() = 0;
 };
 
-class TaskContext
-	: public TaskContextBase
+class TaskImpl
+	: public TaskImplBase
 {
 protected:
 	std::unique_ptr<TaskFunctionBase> taskfunc;
 
 public:
-	TaskContext() = default;
+	TaskImpl() = default;
 
-	TaskContext(std::unique_ptr<TaskFunctionBase> func)
+	TaskImpl(std::unique_ptr<TaskFunctionBase> func)
 		: taskfunc(std::move(func))
 	{}
 
-	virtual ~TaskContext()
+	virtual ~TaskImpl()
 	{}
 
 	bool IsFinished() const
@@ -62,4 +62,4 @@ public:
 
 } // namespace as
 
-#endif // AS_TASK_CONTEXT_HPP
+#endif // AS_TASK_IMPL_HPP

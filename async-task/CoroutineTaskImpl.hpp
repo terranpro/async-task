@@ -1,5 +1,5 @@
 //
-//  CoroutineTaskContext.hpp - Coroutine abstraction implemented via boost::context
+//  CoroutineTaskImpl.hpp - Coroutine Tasks implementation via boost::context
 //
 //  Copyright (c) 2015 Brian Fransioli
 //
@@ -8,8 +8,8 @@
 //  http://www.boost.org/LICENSE_1_0.txt
 //
 
-#ifndef AS_COROUTINE_TASK_HPP
-#define AS_COROUTINE_TASK_HPP
+#ifndef AS_COROUTINE_TASK_IMPL_HPP
+#define AS_COROUTINE_TASK_IMPL_HPP
 
 #include <boost/assert.hpp>
 #include <boost/context/all.hpp>
@@ -17,13 +17,13 @@
 #include <boost/config.hpp>
 #include <boost/context/detail/config.hpp>
 
-#include "TaskContext.hpp"
+#include "TaskImpl.hpp"
 
 namespace as {
 
 namespace detail {
 
-static thread_local std::vector< TaskContext * > this_task_stack{};
+static thread_local std::vector< TaskImpl * > this_task_stack{};
 
 template< std::size_t Max, std::size_t Default, std::size_t Min >
 class simple_stack_allocator
@@ -189,8 +189,8 @@ struct BoostContext
 } // namespace v2
 
 
-class CoroutineTaskContext
-	: public TaskContext
+class CoroutineTaskImpl
+	: public TaskImpl
 {
 
 	typedef detail::simple_stack_allocator<
@@ -214,7 +214,7 @@ private:
 
 	static void entry_point( intptr_t p )
 	{
-		auto self = reinterpret_cast< CoroutineTaskContext * >(p);
+		auto self = reinterpret_cast< CoroutineTaskImpl * >(p);
 
 		self->on_entry();
 
@@ -229,29 +229,29 @@ private:
 	}
 
 public:
-	CoroutineTaskContext()
-		: TaskContext(nullptr)
+	CoroutineTaskImpl()
+		: TaskImpl(nullptr)
 		, alloc()
 		, stack_size( stack_allocator::default_stacksize() )
 		, stack( alloc.allocate( stack_size ) )
-		, bctxt( &CoroutineTaskContext::entry_point,
+		, bctxt( &CoroutineTaskImpl::entry_point,
 		         reinterpret_cast<intptr_t>(this) )
 	{
 		bctxt.Init( stack, stack_size );
 	}
 
-	CoroutineTaskContext(std::unique_ptr<TaskFunctionBase> tfunc)
-		: TaskContext( std::move(tfunc) )
+	CoroutineTaskImpl(std::unique_ptr<TaskFunctionBase> tfunc)
+		: TaskImpl( std::move(tfunc) )
 		, alloc()
 		, stack_size( stack_allocator::default_stacksize() )
 		, stack( alloc.allocate( stack_size ) )
-		, bctxt( &CoroutineTaskContext::entry_point,
+		, bctxt( &CoroutineTaskImpl::entry_point,
 		         reinterpret_cast<intptr_t>(this) )
 	{
 		bctxt.Init( stack, stack_size );
 	}
 
-	~CoroutineTaskContext()
+	~CoroutineTaskImpl()
 	{
 		deinitialize_context();
 	}
@@ -286,4 +286,4 @@ inline void yield()
 
 } // namespace as
 
-#endif // AS_COROUTINE_TASK_HPP
+#endif // AS_COROUTINE_TASK_IMPL_HPP

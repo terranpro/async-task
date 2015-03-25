@@ -535,23 +535,23 @@ void pipeline_simulation()
 
 int main(int argc, char *argv[])
 {
-	// foo_test();
+	foo_test();
 
-	// coro_test();
+	coro_test();
 
-	// thread_executor_test();
+	thread_executor_test();
 
-	// async_ptr_from_unique_ptr();
+	async_ptr_from_unique_ptr();
 
-	// async_ptr_init_base_from_child_test();
+	async_ptr_init_base_from_child_test();
 
-	// async_ptr_recursive_use_test();
+	async_ptr_recursive_use_test();
 
 	async_ops_test();
 
-	// repeated_task_test();
+	repeated_task_test();
 
-	// pipeline_simulation();
+	pipeline_simulation();
 
 	return 0;
 }

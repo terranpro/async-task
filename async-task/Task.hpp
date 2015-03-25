@@ -19,14 +19,14 @@
 // TODO: enable when platform boost supports context
 //#undef AS_USE_COROUTINE_TASKS
 
-#include "TaskContext.hpp"
+#include "TaskImpl.hpp"
 #include "TaskControlBlock.hpp"
 #include "TaskFunction.hpp"
 #include "TaskStatus.hpp"
 #include "Channel.hpp"
 
 #ifdef AS_USE_COROUTINE_TASKS
-#include "CoroutineTaskContext.hpp"
+#include "CoroutineTaskImpl.hpp"
 #endif // AS_USE_COROUTINE_TASKS
 
 namespace as {
@@ -69,7 +69,7 @@ public:
 class Task
 {
 private:
-	std::shared_ptr<TaskContext> context;
+	std::shared_ptr<TaskImpl> context;
 
 public:
 	struct GenericTag {};
@@ -88,7 +88,7 @@ public:
 	                                           >::type >
 
 	Task(Func&& func, Args&&... args)
-		: context{ std::make_shared<TaskContext>(
+		: context{ std::make_shared<TaskImpl>(
 			         make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) }
 	{}
 
@@ -100,26 +100,26 @@ public:
 	                                           >::type
 	        >
 	Task(std::unique_ptr<TFunc> tf)
-		: context( std::make_shared<TaskContext>(std::move(tf)) )
+		: context( std::make_shared<TaskImpl>(std::move(tf)) )
 	{}
 
 	// Explicitly Generic
 	template<class Func, class... Args>
 	Task(GenericTag, Func&& func, Args&&... args)
-		: context{ std::make_shared<TaskContext>(
+		: context{ std::make_shared<TaskImpl>(
 			make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) }
 	{}
 
 	template<class TFunc>
 	Task(GenericTag, std::unique_ptr<TFunc> tf)
-		: context( std::make_shared<TaskContext>( std::move(tf) ) )
+		: context( std::make_shared<TaskImpl>( std::move(tf) ) )
 	{}
 
 #ifdef AS_USE_COROUTINE_TASKS
 	// Explicity Coroutine
 	template<class Func, class... Args>
 	Task(CoroutineTag, Func&& func, Args&&... args)
-		: context( std::make_shared<CoroutineTaskContext>(
+		: context( std::make_shared<CoroutineTaskImpl>(
 			           make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) )
 	{}
 
@@ -132,7 +132,7 @@ public:
 	                                           >::type
 	        >
 	Task(CoroutineTag, std::unique_ptr<TFunc> tf)
-		: context( std::make_shared<CoroutineTaskContext>( std::move(tf) ) )
+		: context( std::make_shared<CoroutineTaskImpl>( std::move(tf) ) )
 	{}
 #endif // AS_USE_COROUTINE_TASKS
 
