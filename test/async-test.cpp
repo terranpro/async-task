@@ -543,16 +543,10 @@ void sync_test()
 
 	assert( x == 42 );
 
-	as::ThreadExecutor t1;
-
-	auto y = as::sync( t1, [&t1]() {
+	auto y = as::sync( as::Executor::GetDefault(), []() {
 			std::this_thread::sleep_for( std::chrono::milliseconds(500) );
 
-			assert( t1.IsCurrent() );
-
-			auto z = as::sync( t1, [t1]() {
-					assert( t1.IsCurrent() );
-
+			auto z = as::sync( as::Executor::GetDefault(), []() {
 					std::this_thread::sleep_for( std::chrono::milliseconds(50) );
 					return -1;
 				} );

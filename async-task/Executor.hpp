@@ -31,10 +31,8 @@ public:
 	virtual bool IsCurrent() const = 0;
 
 	// TODO: can this be done...
-	// static Executor& GetCurrent()
-	// {
 
-	// }
+	static Executor& GetDefault();
 };
 
 } // namespace as
