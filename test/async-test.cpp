@@ -1,4 +1,5 @@
 #include "Async.hpp"
+#include "Sync.hpp"
 #include "Await.hpp"
 #include "AsyncPtr.hpp"
 #include "ThreadExecutor.hpp"
@@ -534,6 +535,36 @@ void pipeline_simulation()
 	}
 }
 
+void sync_test()
+{
+	auto x = as::sync( []() {
+			return 42;
+		} );
+
+	assert( x == 42 );
+
+	as::ThreadExecutor t1;
+
+	auto y = as::sync( t1, [&t1]() {
+			std::this_thread::sleep_for( std::chrono::milliseconds(500) );
+
+			assert( t1.IsCurrent() );
+
+			auto z = as::sync( t1, [t1]() {
+					assert( t1.IsCurrent() );
+
+					std::this_thread::sleep_for( std::chrono::milliseconds(50) );
+					return -1;
+				} );
+
+			assert( z == -1 );
+
+			return z + 99;
+		} );
+
+	assert( y == 98 );
+}
+
 int main(int argc, char *argv[])
 {
 	foo_test();
@@ -553,6 +584,8 @@ int main(int argc, char *argv[])
 	repeated_task_test();
 
 	// pipeline_simulation();
+
+	sync_test();
 
 	return 0;
 }
