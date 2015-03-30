@@ -17,7 +17,7 @@
 namespace as {
 
 template<class Result>
-void await_schedule(Executor& context, Task task, TaskResult<Result> result)
+void await_schedule(Executor& context, Task task, TaskFuture<Result> result)
 {
 	context.Schedule(task);
 

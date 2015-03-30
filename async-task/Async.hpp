@@ -26,7 +26,7 @@ namespace as {
 template<class TaskTag, class Func, class... Args>
 std::pair<
          Task,
-         TaskResult< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
+         TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
         >
 make_task_pair(TaskTag, Func&& func, Args&&... args)
 {
@@ -37,12 +37,12 @@ make_task_pair(TaskTag, Func&& func, Args&&... args)
 	                              std::forward<Args>(args)... );
 
 	return std::make_pair( Task{ TaskTag{}, std::move(tf) },
-	                       TaskResult<result_type>{ tf->GetControlBlock() } );
+	                       TaskFuture<result_type>{ tf->GetControlBlock() } );
 }
 
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext
 template<class Func, class... Args>
-TaskResult< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
+TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
 async(Executor& context, Func&& func, Args&&... args)
 {
 	auto tr_pair = make_task_pair( Task::GenericTag{},
@@ -56,7 +56,7 @@ async(Executor& context, Func&& func, Args&&... args)
 
 /// Dispatch a callback in thread; overload for shared_ptr context
 template<class Func, class... Args>
-TaskResult< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
+TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
 async(std::shared_ptr<Executor> context, Func&& func, Args&&... args)
 {
 	return async( *context, std::forward<Func>(func), std::forward<Args>(args)... );
@@ -64,7 +64,7 @@ async(std::shared_ptr<Executor> context, Func&& func, Args&&... args)
 
 /// Dispatch a callback in a new thread context (via GlibExecutionContext)
 template<class Func, class... Args>
-TaskResult< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
+TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
 async(Func&& func, Args&&... args)
 {
 	// TODO: examine why launching 48+ GlibExecutor's might deadlock on

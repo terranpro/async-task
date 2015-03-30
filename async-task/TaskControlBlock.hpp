@@ -22,10 +22,10 @@
 namespace as {
 
 template<class Ret, class Enable = void>
-struct TaskResultControlBlockBase;
+struct TaskInvoker;
 
 template<class Ret>
-struct TaskResultControlBlockBase<Ret,
+struct TaskInvoker<Ret,
          typename std::enable_if< !std::is_abstract<Ret>::value >::type
         >
 {
@@ -34,7 +34,7 @@ struct TaskResultControlBlockBase<Ret,
 
 	std::unique_ptr<Ret> result;
 
-	TaskResultControlBlockBase() = default;
+	TaskInvoker() = default;
 
 	template<class Func, class Promise>
 	void RunHelper( Func&& task_func, Promise& promise )
@@ -52,14 +52,14 @@ struct TaskResultControlBlockBase<Ret,
 };
 
 template<>
-struct TaskResultControlBlockBase<void>
+struct TaskInvoker<void>
 {
 	typedef void result_type;
 	typedef void reference_type;
 
 	std::atomic<bool> is_set;
 
-	TaskResultControlBlockBase()
+	TaskInvoker()
 		: is_set(false)
 	{}
 
@@ -79,10 +79,10 @@ struct TaskResultControlBlockBase<void>
 };
 
 template<class T>
-struct TaskResultControlBlock
-	: public TaskResultControlBlockBase<T>
+struct TaskControlBlock
+	: public TaskInvoker<T>
 {
-	typedef TaskResultControlBlockBase<T> base_type;
+	typedef TaskInvoker<T> base_type;
 
 	typedef typename base_type::result_type result_type;
 	typedef typename base_type::reference_type reference_type;
@@ -90,14 +90,14 @@ struct TaskResultControlBlock
 	std::promise<reference_type> result_promise;
 	std::shared_future<reference_type> result_future;
 
-	TaskResultControlBlock()
+	TaskControlBlock()
 		: result_promise()
 		, result_future( result_promise.get_future() )
 	{}
 
 	template<class Func>
-	explicit TaskResultControlBlock(Func&& func)
-		: TaskResultControlBlockBase<T>( std::forward<Func>(func) )
+	explicit TaskControlBlock(Func&& func)
+		: TaskInvoker<T>( std::forward<Func>(func) )
 		, result_promise()
 		, result_future( result_promise.get_future() )
 	{}
@@ -145,13 +145,13 @@ struct TaskResultControlBlock
 };
 
 template<class T>
-struct TaskResultControlBlock< TaskFuncResult<T> >
+struct TaskControlBlock< TaskResult<T> >
 {
 	typedef typename Channel<T>::result_type result_type;
 
 	Channel<T> channel;
 
-	TaskResultControlBlock() = default;
+	TaskControlBlock() = default;
 
 	template<class Func>
 	void Run(Func& task_func)
@@ -159,7 +159,7 @@ struct TaskResultControlBlock< TaskFuncResult<T> >
 		if ( !channel.IsOpen() )
 			return;
 
-		TaskFuncResult<T> fr = task_func();
+		TaskResult<T> fr = task_func();
 
 		if ( fr.status == TaskStatus::Finished ||
 		     fr.status == TaskStatus::Continuing ) {

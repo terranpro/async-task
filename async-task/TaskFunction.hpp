@@ -30,7 +30,7 @@ template<class Ret>
 struct TaskFunction
 	: public TaskFunctionBase
 {
-	std::shared_ptr< TaskResultControlBlock<Ret> > ctrl;
+	std::shared_ptr< TaskControlBlock<Ret> > ctrl;
 	std::function<Ret()> task_func;
 
 	template<class Func, class... Args>
@@ -54,16 +54,16 @@ struct TaskFunction
 		return ctrl && ctrl->IsFinished();
 	}
 
-	std::shared_ptr< TaskResultControlBlock<Ret> >
+	std::shared_ptr< TaskControlBlock<Ret> >
 	GetControlBlock()
 	{
 		return ctrl;
 	}
 
 private:
-	std::shared_ptr< TaskResultControlBlock<Ret> > CreateControlBlock() const
+	std::shared_ptr< TaskControlBlock<Ret> > CreateControlBlock() const
 	{
-		return std::make_shared< TaskResultControlBlock<Ret> >();
+		return std::make_shared< TaskControlBlock<Ret> >();
 	}
 };
 

@@ -32,18 +32,18 @@
 namespace as {
 
 template<class T>
-class TaskResult
+class TaskFuture
 {
-	std::shared_ptr< TaskResultControlBlock<T> > ctrl;
+	std::shared_ptr< TaskControlBlock<T> > ctrl;
 
 public:
-	TaskResult() = default;
+	TaskFuture() = default;
 
-	TaskResult( std::shared_ptr<TaskResultControlBlock<T> > ctrl)
+	TaskFuture( std::shared_ptr<TaskControlBlock<T> > ctrl)
 		: ctrl(ctrl)
 	{}
 
-	typename TaskResultControlBlock<T>::result_type
+	typename TaskControlBlock<T>::result_type
 	Get()
 	{
 		return ctrl->Get();

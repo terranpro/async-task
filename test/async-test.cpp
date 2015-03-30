@@ -71,9 +71,9 @@ std::atomic<int> foo::obj_copy{0};
 template<class T>
 struct TaskFinisher
 {
-	as::TaskResult<T> result;
+	as::TaskFuture<T> result;
 
-	TaskFinisher(as::TaskResult<T> result)
+	TaskFinisher(as::TaskFuture<T> result)
 		: result(result)
 	{}
 
@@ -209,8 +209,8 @@ void thread_executor_test()
 
 	as::ThreadExecutor exec;
 
-	as::TaskResult<void> mid_result;
-	as::TaskResult<void> inner_result;
+	as::TaskFuture<void> mid_result;
+	as::TaskFuture<void> inner_result;
 
 	auto innerfunc = [&inner_done]() {
 		std::cout << "Inner!\n";
@@ -474,7 +474,7 @@ void repeated_task_test()
 
 	auto tp =
 		as::make_task_pair( as::Task::GenericTag{},
-			[&x]() -> as::TaskFuncResult<void>
+			[&x]() -> as::TaskResult<void>
 			{
 				++x;
 
@@ -500,7 +500,7 @@ void pipeline_simulation()
 	as::ThreadExecutor t_stage1;
 	as::ThreadExecutor t_stage2;
 
-	auto func_stage1 = [](std::istream& is) -> as::TaskFuncResult<std::string>
+	auto func_stage1 = [](std::istream& is) -> as::TaskResult<std::string>
 		{
 			std::string in;
 			while( std::getline(is, in) ) {
@@ -511,8 +511,8 @@ void pipeline_simulation()
 			return as::cancel;
 		};
 
-	auto func_stage2 = [](as::TaskResult< as::TaskFuncResult<std::string> > res)
-		-> as::TaskFuncResult<int>
+	auto func_stage2 = [](as::TaskFuture< as::TaskResult<std::string> > res)
+		-> as::TaskResult<int>
 		{
 			std::cout << "Stage2 Get PRE\n";
 			auto in = res.Get();
@@ -530,7 +530,7 @@ void pipeline_simulation()
 
 	auto stage2_res = as::async( t_stage2, func_stage2, stage1_res );
 
-	while( auto out = stage2_res.Get() ) {
+	while( std::unique_ptr<int> out = stage2_res.Get() ) {
 		std::cout << "Got output: " << *out << "\n";
 	}
 }

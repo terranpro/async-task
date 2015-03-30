@@ -45,7 +45,7 @@ struct ChannelImpl
 	}
 
 	template<class U>
-	void Put(TaskFuncResult<U>&& u)
+	void Put(TaskResult<U>&& u)
 	{
 		std::lock_guard<std::mutex> lock( results_mut );
 
@@ -143,7 +143,7 @@ struct ChannelImpl<void>
 		return !( finished || canceled );
 	}
 
-	void Put(TaskFuncResult<void>)
+	void Put(TaskResult<void>)
 	{
 		std::lock_guard<std::mutex> lock( results_mut );
 		results.push_back( {} );
@@ -225,7 +225,7 @@ public:
 		return impl->IsOpen();
 	}
 
-	void Put(TaskFuncResult<T> tfr)
+	void Put(TaskResult<T> tfr)
 	{
 		impl->Put( std::move(tfr) );
 	}
@@ -260,6 +260,46 @@ public:
 	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
 	{
 		return impl->WaitFor( dur );
+	}
+};
+
+template<class T>
+struct ChannelIterator
+{
+	typedef typename ChannelImpl<T>::result_type result_type;
+
+	std::weak_ptr< ChannelImpl<T> > weak_channel;
+
+	ChannelIterator()
+		: weak_channel()
+	{}
+
+	ChannelIterator(std::shared_ptr< ChannelImpl<T> > channelimpl )
+		: weak_channel(channelimpl)
+	{}
+
+	result_type operator*()
+	{
+		auto ch = weak_channel.lock();
+		if ( ch )
+			return ch->Get();
+		// TODO:
+	}
+
+	void operator++()
+	{}
+
+	void operator++(int)
+	{}
+
+	bool operator!=(ChannelIterator const& other) const
+	{
+		return weak_channel != other.weak_channel;
+	}
+
+	explicit operator bool() const
+	{
+		return weak_channel;
 	}
 };
 

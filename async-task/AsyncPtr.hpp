@@ -83,10 +83,10 @@ template<class T>
 struct AsyncPtrSynchronizer
 	: public AsyncPtrControlBlock
 {
-	TaskResult<T> result;
+	TaskFuture<T> result;
 	std::unique_ptr<T> ptr;
 
-	AsyncPtrSynchronizer(TaskResult<T> r)
+	AsyncPtrSynchronizer(TaskFuture<T> r)
 		: result( std::move(r) )
 	{}
 
@@ -101,7 +101,7 @@ template<class T>
 struct AsyncPtrSynchronizer<T *>
 	: public AsyncPtrControlBlock
 {
-	TaskResult<T *> result;
+	TaskFuture<T *> result;
 	std::unique_ptr<T> ptr;
 
 	AsyncPtrSynchronizer(std::unique_ptr<T> ptr)
@@ -110,7 +110,7 @@ struct AsyncPtrSynchronizer<T *>
 		data = ptr.release();
 	}
 
-	AsyncPtrSynchronizer(TaskResult<T *>&& r)
+	AsyncPtrSynchronizer(TaskFuture<T *>&& r)
 		: result( std::move(r) )
 	{}
 
@@ -128,10 +128,10 @@ template<class T>
 struct AsyncPtrSynchronizer< std::unique_ptr<T> >
 	: public AsyncPtrControlBlock
 {
-	TaskResult< std::unique_ptr<T> > result;
+	TaskFuture< std::unique_ptr<T> > result;
 	std::unique_ptr<T> ptr;
 
-	AsyncPtrSynchronizer(TaskResult< std::unique_ptr<T> >&& r)
+	AsyncPtrSynchronizer(TaskFuture< std::unique_ptr<T> >&& r)
 		: result( std::move(r) )
 	{}
 
@@ -173,7 +173,7 @@ public:
 		         !std::is_pointer<U>::value
 	                                           >::type
 	        >
-	AsyncPtr( TaskResult< std::unique_ptr<U> > res )
+	AsyncPtr( TaskFuture< std::unique_ptr<U> > res )
 		: ptr(), impl( std::make_shared<AsyncPtrSynchronizer< std::unique_ptr<U> > >( std::move(res) ) )
 	{}
 
@@ -184,7 +184,7 @@ public:
 		&& !std::is_pointer<U>::value
 	                                           >::type
 	        >
-	AsyncPtr( TaskResult<U> res )
+	AsyncPtr( TaskFuture<U> res )
 		: ptr(), impl( std::make_shared<AsyncPtrSynchronizer<U> >(res) )
 	{}
 
@@ -194,7 +194,7 @@ public:
 		         std::is_convertible<U, T>::value
 	                                           >::type
 	        >
-	AsyncPtr( TaskResult<U *>&& res )
+	AsyncPtr( TaskFuture<U *>&& res )
 		: ptr()
 		, impl( std::make_shared<AsyncPtrSynchronizer<U *> >(std::move(res)) )
 	{}

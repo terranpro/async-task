@@ -22,11 +22,12 @@
 
 namespace as {
 
-struct GlibThread
+class GlibThread
 {
 	GThread *context_thread;
 	GMainLoop *loop;
 
+public:
 	GlibThread(GMainLoop *l)
 		: context_thread()
 		, loop( l ) // assume control of pointer, do not ref here
@@ -47,14 +48,13 @@ struct GlibThread
 			Shutdown();
 	}
 
+	GlibThread(GlibThread const&) = delete;
+	GlibThread& operator=(GlibThread const&) = delete;
+
 	operator GThread *() const
 	{
 		return context_thread;
 	}
-
-private:
-	GlibThread(GlibThread const&) = delete;
-	GlibThread& operator=(GlibThread const&) = delete;
 
 private:
 	static gpointer ThreadEntryPoint(gpointer user_data)

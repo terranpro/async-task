@@ -30,91 +30,91 @@ enum class TaskStatus {
 };
 
 template<class T>
-struct TaskFuncResult;
+struct TaskResult;
 
 template<>
-struct TaskFuncResult<void>;
+struct TaskResult<void>;
 
 template<>
-struct TaskFuncResult<void>
+struct TaskResult<void>
 {
 	TaskStatus status;
 
-	TaskFuncResult()
+	TaskResult()
 		: status()
 	{}
 
-	TaskFuncResult(TaskStatus s)
+	TaskResult(TaskStatus s)
 		: status(s)
 	{}
 
 	template<class U>
-	operator TaskFuncResult<U>()
+	operator TaskResult<U>()
 	{
-		return TaskFuncResult<U>(*this);
+		return TaskResult<U>(*this);
 	}
 };
 
 template<class T>
-struct TaskFuncResult
+struct TaskResult
 {
 	TaskStatus status;
 	std::unique_ptr<T> ret;
 
-	TaskFuncResult()
+	TaskResult()
 		: status()
 		, ret()
 	{}
 
-	TaskFuncResult(TaskStatus s)
+	TaskResult(TaskStatus s)
 		: status(s)
 		, ret()
 	{}
 
-	TaskFuncResult(TaskStatus s, T val)
+	TaskResult(TaskStatus s, T val)
 		: status(s)
 		, ret( new T{ val } )
 	{}
 
-	explicit TaskFuncResult(T val)
+	explicit TaskResult(T val)
 		: status()
 		, ret( new T{ val } )
 	{}
 
-	TaskFuncResult(TaskFuncResult<void> const& other)
+	TaskResult(TaskResult<void> const& other)
 		: status(other.status)
 		, ret()
 	{}
 };
 
-static const TaskFuncResult<void> repeat{ TaskStatus::Repeat };
+static const TaskResult<void> repeat{ TaskStatus::Repeat };
 
-static const TaskFuncResult<void> cancel{ TaskStatus::Canceled };
+static const TaskResult<void> cancel{ TaskStatus::Canceled };
 
 template<class T>
-inline TaskFuncResult< typename std::remove_reference<T>::type >
+inline TaskResult< typename std::remove_reference<T>::type >
 finished(T&& res)
 {
-	return TaskFuncResult< typename std::remove_reference<T>::type >( TaskStatus::Finished, std::forward<T>(res) );
+	return TaskResult< typename std::remove_reference<T>::type >( TaskStatus::Finished, std::forward<T>(res) );
 }
 
-inline TaskFuncResult<void>
+inline TaskResult<void>
 finished()
 {
-	return TaskFuncResult<void>( TaskStatus::Finished );
+	return TaskResult<void>( TaskStatus::Finished );
 }
 
 template<class T>
-inline TaskFuncResult< typename std::remove_reference<T>::type >
+inline TaskResult< typename std::remove_reference<T>::type >
 continuing(T&& res)
 {
-	return TaskFuncResult< typename std::remove_reference<T>::type >( TaskStatus::Continuing, std::forward<T>(res) );
+	return TaskResult< typename std::remove_reference<T>::type >( TaskStatus::Continuing, std::forward<T>(res) );
 }
 
-inline TaskFuncResult<void>
+inline TaskResult<void>
 continuing()
 {
-	return TaskFuncResult<void>( TaskStatus::Continuing );
+	return TaskResult<void>( TaskStatus::Continuing );
 }
 
 } // namespace as
