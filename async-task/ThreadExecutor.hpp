@@ -165,13 +165,13 @@ private:
 				continue;
 			}
 
-			Task cur_task = cur_info.task;
+			Task& cur_task = cur_info.task;
 			cur_task.Invoke();
 			if ( !cur_task.IsFinished() ) {
 
 				cur_info.next_invocation = Clock::now() + cur_info.interval_ms;
 
-				next_tasks.push_back( cur_info );
+				next_tasks.push_back( std::move(cur_info) );
 			}
 
 		}

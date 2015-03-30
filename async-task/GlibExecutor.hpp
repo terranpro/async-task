@@ -227,10 +227,10 @@ private:
 class GlibExecutor
 	: public Executor
 {
-	std::unique_ptr<GlibExecutorImpl> impl;
+	std::shared_ptr<GlibExecutorImpl> impl;
 
-	GlibExecutor(void *context)
-		: impl( new GlibExecutorImpl( static_cast<GMainContext *>(context) ) )
+	GlibExecutor(GMainContext *context)
+		: impl( std::make_shared<GlibExecutorImpl>( context ) )
 	{}
 
 public:
@@ -243,7 +243,7 @@ public:
 
 public:
 	GlibExecutor()
-		: impl( new GlibExecutorImpl )
+		: impl( std::make_shared<GlibExecutorImpl>() )
 	{}
 
 	void Schedule(Task task)
