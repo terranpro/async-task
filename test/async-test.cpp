@@ -1,5 +1,6 @@
 #include "Async.hpp"
 #include "Await.hpp"
+#include "AsyncPtr.hpp"
 #include "ThreadExecutor.hpp"
 #include "GlibExecutor.hpp"
 
