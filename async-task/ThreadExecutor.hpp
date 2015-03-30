@@ -103,7 +103,7 @@ public:
 		// TODO
 	}
 
-	bool IsCurrent()
+	bool IsCurrent() const
 	{
 		return thr.get_id() == std::this_thread::get_id();
 	}
@@ -258,7 +258,7 @@ public:
 		impl->Iteration();
 	}
 
-	bool IsCurrent()
+	bool IsCurrent() const
 	{
 		return impl->IsCurrent();
 	}

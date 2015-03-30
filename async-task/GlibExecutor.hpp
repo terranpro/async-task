@@ -47,7 +47,7 @@ struct GlibThread
 			Shutdown();
 	}
 
-	operator GThread *()
+	operator GThread *() const
 	{
 		return context_thread;
 	}
@@ -156,7 +156,7 @@ struct GlibExecutorImpl
 		g_main_context_iteration( context, FALSE );
 	}
 
-	bool IsCurrent()
+	bool IsCurrent() const
 	{
 		return g_thread_self() == gthread;
 	}
@@ -261,7 +261,7 @@ public:
 		impl->Iteration();
 	}
 
-	bool IsCurrent()
+	bool IsCurrent() const
 	{
 		return impl->IsCurrent();
 	}
