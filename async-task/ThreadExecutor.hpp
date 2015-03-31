@@ -74,6 +74,8 @@ public:
 		}
 
 		thr.join();
+
+		assert( task_queue.size() == 0 );
 	}
 
 	void Schedule(Task task)

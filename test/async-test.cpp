@@ -559,27 +559,59 @@ void sync_test()
 	assert( y == 98 );
 }
 
+const unsigned int iterations = 1000000;
+
+void chain(as::Executor& ex, unsigned int i)
+{
+	if (i < iterations)
+		as::async( ex, chain, std::ref(ex), i + 1);
+}
+
+void function_context_switch_test()
+{
+	const int chains = 4;
+
+	using clock = std::chrono::high_resolution_clock;
+
+	clock::time_point start = clock::now();
+	{
+		as::ThreadExecutor ex;
+
+		for( int i = 0; i < chains; ++i )
+			as::sync( ex, [&]() { chain(ex, 0); } );
+	}
+  clock::duration elapsed = clock::now() - start;
+
+  std::cout << "time per switch: ";
+  clock::duration per_iteration = elapsed / iterations / chains;
+  std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(per_iteration).count() << "\n";
+  std::cout << "switches per second: ";
+  std::cout << (std::chrono::seconds(1) / per_iteration) << "\n";
+}
+
 int main(int argc, char *argv[])
 {
-	foo_test();
+	// foo_test();
 
-	coro_test();
+	// coro_test();
 
-	thread_executor_test();
+	// thread_executor_test();
 
-	async_ptr_from_unique_ptr();
+	// async_ptr_from_unique_ptr();
 
-	async_ptr_init_base_from_child_test();
+	// async_ptr_init_base_from_child_test();
 
-	async_ptr_recursive_use_test();
+	// async_ptr_recursive_use_test();
 
-	async_ops_test();
+	// async_ops_test();
 
-	repeated_task_test();
+	// repeated_task_test();
 
 	// pipeline_simulation();
 
-	sync_test();
+	// sync_test();
+
+	function_context_switch_test();
 
 	return 0;
 }
