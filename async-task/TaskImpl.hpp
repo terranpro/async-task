@@ -35,15 +35,14 @@ class TaskImpl
 {
 protected:
 	std::shared_ptr< TaskControlBlock<Ret> > ctrl;
-	std::function<Ret()> taskfunc;
 
 public:
 	TaskImpl() = default;
 
 	template<class Func, class... Args>
 	TaskImpl( Func&& func, Args&&... args )
-		: ctrl( std::make_shared< TaskControlBlock<Ret> >() )
-		, taskfunc( std::bind(std::forward<Func>(func), std::forward<Args>(args)... ) )
+		: ctrl( std::make_shared< TaskControlBlock<Ret> >(
+			        std::bind(std::forward<Func>(func), std::forward<Args>(args)... ) ) )
 	{}
 
 	virtual ~TaskImpl()
@@ -51,7 +50,7 @@ public:
 
 	virtual void Invoke()
 	{
-		ctrl->Run( taskfunc );
+		ctrl->Run();
 	}
 
 	virtual void Yield()

@@ -32,16 +32,23 @@ struct TaskInvoker<Ret,
 	typedef Ret& result_type;
 	typedef Ret& reference_type;
 
+	std::function<Ret()> taskfunc;
 	std::unique_ptr<Ret> result;
 
 	TaskInvoker() = default;
 
-	template<class Func, class Promise>
-	void RunHelper( Func& task_func, Promise& promise )
-	{
-		assert( task_func );
+	template<class Func>
+	TaskInvoker( Func&& func )
+		: taskfunc( std::forward<Func>(func) )
+		, result()
+	{}
 
-		result.reset( new Ret{ task_func() } );
+	template<class Promise>
+	void RunHelper( Promise& promise )
+	{
+		assert( taskfunc );
+
+		result.reset( new Ret{ taskfunc() } );
 		promise.set_value( *result );
 	}
 
@@ -57,16 +64,24 @@ struct TaskInvoker<void>
 	typedef void result_type;
 	typedef void reference_type;
 
+	std::function<void()> taskfunc;
 	std::atomic<bool> is_set;
 
 	TaskInvoker()
-		: is_set(false)
+		: taskfunc()
+		, is_set(false)
 	{}
 
-	template<class Func, class Promise>
-	void RunHelper( Func& task_func, Promise& promise )
+	template<class Func>
+	TaskInvoker( Func&& func )
+		: taskfunc( std::forward<Func>(func) )
+		, is_set(false)
+	{}
+
+	template<class Promise>
+	void RunHelper( Promise& promise )
 	{
-		task_func();
+		taskfunc();
 
 		promise.set_value();
 		is_set = true;
@@ -102,13 +117,12 @@ struct TaskControlBlock
 		, result_future( result_promise.get_future() )
 	{}
 
-	template<class Func>
-	void Run(Func& task_func)
+	void Run()
 	{
 		if ( IsFinished() )
 			return;
 
-		base_type::RunHelper( task_func, result_promise );
+		base_type::RunHelper( result_promise );
 	}
 
 	void Cancel()
@@ -150,11 +164,15 @@ struct TaskControlBlock< TaskResult<T> >
 	typedef typename Channel<T>::result_type result_type;
 
 	Channel<T> channel;
-
-	TaskControlBlock() = default;
+	std::function< TaskResult<T>()> task_func;
 
 	template<class Func>
-	void Run(Func& task_func)
+	TaskControlBlock(Func&& tfunc)
+		: channel()
+		, task_func(std::forward<Func>(tfunc))
+	{}
+
+	void Run()
 	{
 		if ( !channel.IsOpen() )
 			return;

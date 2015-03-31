@@ -114,6 +114,7 @@ private:
 		loop = NULL;
 
 		g_thread_unref( context_thread );
+
 		context_thread = NULL;
 	}
 };

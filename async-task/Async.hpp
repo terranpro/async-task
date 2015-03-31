@@ -22,36 +22,16 @@
 
 namespace as {
 
-/// Create a Task and deduced TaskResult<> pair
-template<class TaskTag, class Func, class... Args>
-std::pair<
-         Task,
-         TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
-        >
-make_task_pair(TaskTag, Func&& func, Args&&... args)
-{
-	typedef decltype( std::declval<Func>()(std::declval<Args>()...) )
-		result_type;
-
-	auto timpl = make_task<TaskImpl>( std::forward<Func>(func),
-	                                  std::forward<Args>(args)... );
-
-	return std::make_pair( Task{ std::move(timpl) },
-	                       TaskFuture<result_type>{ timpl->GetControlBlock() } );
-}
-
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext
 template<class Func, class... Args>
 TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
 async(Executor& context, Func&& func, Args&&... args)
 {
-	auto tr_pair = make_task_pair( Task::GenericTag{},
-	                               std::forward<Func>(func),
-	                               std::forward<Args>(args)... );
+	auto timpl = make_task<TaskImpl>( std::forward<Func>(func),
+	                                  std::forward<Args>(args)... );
+	context.Schedule( {timpl} );
 
-	context.Schedule( tr_pair.first );
-
-	return tr_pair.second;
+	return { timpl->GetControlBlock() };
 }
 
 /// Dispatch a callback in thread; overload for shared_ptr context

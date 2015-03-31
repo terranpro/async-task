@@ -1,6 +1,6 @@
 #include "Async.hpp"
 #include "Sync.hpp"
-#include "Await.hpp"
+//#include "Await.hpp"
 #include "AsyncPtr.hpp"
 #include "ThreadExecutor.hpp"
 #include "GlibExecutor.hpp"
@@ -496,6 +496,8 @@ void repeated_task_test()
 	assert( x == 5 );
 }
 
+*/
+
 void pipeline_simulation()
 {
 	as::ThreadExecutor t_stage1;
@@ -536,7 +538,6 @@ void pipeline_simulation()
 	}
 }
 
-*/
 void sync_test()
 {
 	auto x = as::sync( []() {
@@ -580,7 +581,7 @@ void function_context_switch_test()
 		as::ThreadExecutor ex;
 
 		for( int i = 0; i < chains; ++i )
-			as::sync( ex, [&]() { chain(ex, 0); } );
+			as::async( ex, [&]() { chain(ex, 0); } );
 	}
   clock::duration elapsed = clock::now() - start;
 
@@ -616,9 +617,9 @@ int main(int argc, char *argv[])
 
 	// repeated_task_test();
 
-	// pipeline_simulation();
+	pipeline_simulation();
 
-	// sync_test();
+	sync_test();
 
 	function_context_switch_test();
 

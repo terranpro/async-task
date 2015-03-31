@@ -16,8 +16,7 @@
 
 namespace as {
 
-template<class Result>
-void await_schedule(Executor& context, Task task, TaskFuture<Result> result)
+void await_schedule(Executor& context, Task task)
 {
 	context.Schedule(task);
 
@@ -39,15 +38,14 @@ template<class Func, class... Args>
 decltype( std::declval<Func>()(std::declval<Args>()...) )
 await(Executor& context, Func&& func, Args&&... args)
 {
-	auto tr_pair = as::make_task_pair( Task::CoroutineTag{},
-	                                   std::forward<Func>(func),
+	auto timpl =  make_task<TaskImpl>( std::forward<Func>(func),
 	                                   std::forward<Args>(args)... );
-	auto& task = tr_pair.first;
-	auto& res  = tr_pair.second;
 
-	await_schedule( context, task, res );
+	Task task{ timpl };
 
-	return res.Get();
+	await_schedule( context, task );
+
+	return timpl->GetControlBlock()->Get();
 }
 
 template<class Func, class... Args>

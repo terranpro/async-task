@@ -25,13 +25,12 @@ auto sync(Executor& context, Func&& func, Args&&... args)
 		return std::forward<Func>(func)( std::forward<Args>(args)... );
 
 
-	auto tr_pair = make_task_pair( Task::GenericTag{},
-	                               std::forward<Func>(func),
-	                               std::forward<Args>(args)... );
+	auto timpl = make_task<TaskImpl>( std::forward<Func>(func),
+	                                  std::forward<Args>(args)... );
 
-	context.Schedule( tr_pair.first );
+	context.Schedule( {timpl} );
 
-	return tr_pair.second.Get();
+	return timpl->GetControlBlock()->Get();
 }
 
 template<class Func, class... Args>

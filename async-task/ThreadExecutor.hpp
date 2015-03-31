@@ -35,12 +35,12 @@ class ThreadExecutorImpl
 
 	struct TaskInfo
 	{
-		std::shared_ptr<TaskImplBase> task;
+		Task task;
 		TimePoint next_invocation;
 		Interval interval_ms;
 
-		TaskInfo(std::shared_ptr<TaskImplBase> task)
-			: task(task)
+		TaskInfo(Task&& task)
+			: task( std::move(task) )
 			, next_invocation()
 			, interval_ms(0)
 		{}
@@ -80,7 +80,7 @@ public:
 
 	void Schedule(Task task)
 	{
-		TaskInfo info{task.impl};
+		TaskInfo info{ std::move(task) };
 
 		std::lock_guard<std::mutex> lock{ task_mut };
 		task_queue.push_back( std::move(info) );
@@ -89,7 +89,7 @@ public:
 
 	void ScheduleAfter(Task task, std::chrono::milliseconds time_ms)
 	{
-		TaskInfo info{task.impl};
+		TaskInfo info{ std::move(task) };
 		info.next_invocation = Clock::now() + time_ms;
 		info.interval_ms = time_ms;
 
@@ -163,13 +163,13 @@ private:
 
 		for( auto& cur_info : tasks ) {
 			if( cur_info.interval_ms > Interval(0) && Clock::now() < cur_info.next_invocation ) {
-				next_tasks.push_back( cur_info );
+				next_tasks.push_back( std::move(cur_info) );
 				continue;
 			}
 
 			auto& cur_task = cur_info.task;
-			cur_task->Invoke();
-			if ( !cur_task->IsFinished() ) {
+			cur_task.Invoke();
+			if ( !cur_task.IsFinished() ) {
 
 				cur_info.next_invocation = Clock::now() + cur_info.interval_ms;
 

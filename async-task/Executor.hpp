@@ -30,8 +30,6 @@ public:
 	virtual void Iteration() = 0;
 	virtual bool IsCurrent() const = 0;
 
-	// TODO: can this be done...
-
 	static Executor& GetDefault();
 };
 
