@@ -23,7 +23,7 @@ namespace as {
 
 namespace detail {
 
-static thread_local std::vector< TaskImpl * > this_task_stack{};
+static thread_local std::vector< TaskImplBase * > this_task_stack{};
 
 template< std::size_t Max, std::size_t Default, std::size_t Min >
 class simple_stack_allocator

@@ -37,7 +37,7 @@ struct TaskInvoker<Ret,
 	TaskInvoker() = default;
 
 	template<class Func, class Promise>
-	void RunHelper( Func&& task_func, Promise& promise )
+	void RunHelper( Func& task_func, Promise& promise )
 	{
 		assert( task_func );
 
@@ -64,7 +64,7 @@ struct TaskInvoker<void>
 	{}
 
 	template<class Func, class Promise>
-	void RunHelper( Func&& task_func, Promise& promise )
+	void RunHelper( Func& task_func, Promise& promise )
 	{
 		task_func();
 

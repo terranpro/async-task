@@ -87,6 +87,7 @@ struct TaskFinisher
 	}
 };
 
+/*
 void foo_test()
 {
 	const int init_val = 31337;
@@ -94,7 +95,7 @@ void foo_test()
 	try {
 
 
-		/* as::AsyncPtr<foo> handle */
+		// as::AsyncPtr<foo> handle
 		auto handle = as::make_async<foo>(
 			[init_val]() {
 				return foo{init_val};
@@ -535,6 +536,7 @@ void pipeline_simulation()
 	}
 }
 
+*/
 void sync_test()
 {
 	auto x = as::sync( []() {
@@ -582,8 +584,15 @@ void function_context_switch_test()
 	}
   clock::duration elapsed = clock::now() - start;
 
+  // account for thread startup/shutdown time
+	clock::time_point base_start = clock::now();
+	{
+		as::ThreadExecutor ex;
+	}
+  clock::duration base_elapsed = clock::now() - base_start;
+
   std::cout << "time per switch: ";
-  clock::duration per_iteration = elapsed / iterations / chains;
+  clock::duration per_iteration = (elapsed - base_elapsed) / iterations / chains;
   std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(per_iteration).count() << "\n";
   std::cout << "switches per second: ";
   std::cout << (std::chrono::seconds(1) / per_iteration) << "\n";

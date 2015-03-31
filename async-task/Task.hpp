@@ -21,7 +21,6 @@
 
 #include "TaskImpl.hpp"
 #include "TaskControlBlock.hpp"
-#include "TaskFunction.hpp"
 #include "TaskStatus.hpp"
 #include "Channel.hpp"
 
@@ -69,7 +68,9 @@ public:
 class Task
 {
 private:
-	std::shared_ptr<TaskImpl> impl;
+	std::shared_ptr<TaskImplBase> impl;
+
+	friend class ThreadExecutorImpl;
 
 public:
 	struct GenericTag {};
@@ -78,63 +79,9 @@ public:
 public:
 	Task() = default;
 
-	// Auto deduced Generic
-	template<class Func, class... Args,
-	         typename = typename std::enable_if<
-		         !std::is_base_of< typename std::remove_reference<Func>::type, Task >::value &&
-		         !std::is_same< typename std::remove_reference<Func>::type,
-		                        std::shared_ptr<TaskFunctionBase>
-		                         >::value
-	                                           >::type >
-
-	Task(Func&& func, Args&&... args)
-		: impl{ std::make_shared<TaskImpl>(
-			         make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) }
+	Task(std::shared_ptr<TaskImplBase> impl)
+		: impl(impl)
 	{}
-
-	template<class TFunc,
-	         typename = typename std::enable_if<
-		         std::is_base_of< TaskFunctionBase,
-		                          typename std::remove_reference<TFunc>::type
-		                        >::value
-	                                           >::type
-	        >
-	Task(std::unique_ptr<TFunc> tf)
-		: impl( std::make_shared<TaskImpl>(std::move(tf)) )
-	{}
-
-	// Explicitly Generic
-	template<class Func, class... Args>
-	Task(GenericTag, Func&& func, Args&&... args)
-		: impl{ std::make_shared<TaskImpl>(
-			make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) }
-	{}
-
-	template<class TFunc>
-	Task(GenericTag, std::unique_ptr<TFunc> tf)
-		: impl( std::make_shared<TaskImpl>( std::move(tf) ) )
-	{}
-
-#ifdef AS_USE_COROUTINE_TASKS
-	// Explicity Coroutine
-	template<class Func, class... Args>
-	Task(CoroutineTag, Func&& func, Args&&... args)
-		: impl( std::make_shared<CoroutineTaskImpl>(
-			           make_task_function(std::forward<Func>(func), std::forward<Args>(args)...) ) )
-	{}
-
-
-	template<class TFunc,
-	         typename = typename std::enable_if<
-		         std::is_base_of< TaskFunctionBase,
-		                          typename std::remove_reference<TFunc>::type
-		                        >::value
-	                                           >::type
-	        >
-	Task(CoroutineTag, std::unique_ptr<TFunc> tf)
-		: impl( std::make_shared<CoroutineTaskImpl>( std::move(tf) ) )
-	{}
-#endif // AS_USE_COROUTINE_TASKS
 
 	~Task() = default;
 

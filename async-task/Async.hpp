@@ -33,11 +33,11 @@ make_task_pair(TaskTag, Func&& func, Args&&... args)
 	typedef decltype( std::declval<Func>()(std::declval<Args>()...) )
 		result_type;
 
-	auto tf = make_task_function( std::forward<Func>(func),
-	                              std::forward<Args>(args)... );
+	auto timpl = make_task<TaskImpl>( std::forward<Func>(func),
+	                                  std::forward<Args>(args)... );
 
-	return std::make_pair( Task{ TaskTag{}, std::move(tf) },
-	                       TaskFuture<result_type>{ tf->GetControlBlock() } );
+	return std::make_pair( Task{ std::move(timpl) },
+	                       TaskFuture<result_type>{ timpl->GetControlBlock() } );
 }
 
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext
