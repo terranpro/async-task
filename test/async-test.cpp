@@ -617,9 +617,9 @@ int main(int argc, char *argv[])
 
 	// repeated_task_test();
 
-	pipeline_simulation();
+	// pipeline_simulation();
 
-	sync_test();
+	// sync_test();
 
 	function_context_switch_test();
 

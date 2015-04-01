@@ -20,7 +20,7 @@
 #include <condition_variable>
 #include <atomic>
 #include <chrono>
-#include <vector>
+//#include <vector>
 #include <algorithm>
 
 #include <cassert>
@@ -38,17 +38,97 @@ class ThreadExecutorImpl
 		Task task;
 		TimePoint next_invocation;
 		Interval interval_ms;
+		TaskInfo *next;
 
 		TaskInfo(Task&& task)
 			: task( std::move(task) )
 			, next_invocation()
 			, interval_ms(0)
+			, next(nullptr)
 		{}
+
+	};
+
+	class TaskInfoQueue
+	{
+		TaskInfo *head;
+		TaskInfo *tail;
+
+	public:
+		TaskInfoQueue()
+			: head(nullptr)
+			, tail(nullptr)
+		{}
+
+		~TaskInfoQueue()
+		{
+			int i = 0;
+
+			while( auto tip = Pop() )
+				delete tip;
+		}
+
+		TaskInfoQueue(TaskInfoQueue&& other)
+			: head( other.head )
+			, tail( other.tail )
+		{
+			other.head = nullptr;
+			other.tail = nullptr;
+		}
+
+		TaskInfoQueue(TaskInfoQueue const&) = delete;
+		TaskInfoQueue& operator=(TaskInfoQueue const&) = delete;
+
+	public:
+		TaskInfo *Pop()
+		{
+			if ( head ) {
+				auto tip = head;
+				if ( head == tail )
+					tail = head->next;
+				head = head->next;
+
+				tip->next = nullptr;
+
+				return tip;
+			}
+
+			return nullptr;
+		}
+
+		void Push(TaskInfo&& ti)
+		{
+			auto tip = new TaskInfo( std::move(ti) );
+			Push(tip);
+		}
+
+		void Push(TaskInfo *tip)
+		{
+			if ( !tail ) {
+				head = tail = tip;
+			} else {
+				tail->next = tip;
+				tail = tip;
+			}
+		}
+
+		bool Empty() const
+		{
+			return head == tail && tail == nullptr;
+		}
+	};
+
+	struct Context
+	{
+
 	};
 
 	std::thread thr;
 	std::mutex task_mut;
-	std::vector<TaskInfo> task_queue;
+	// std::vector<TaskInfo> task_queue;
+
+	TaskInfoQueue task_queue;
+
 	std::condition_variable cond;
 	std::atomic<bool> quit_requested;
 	Interval min_sleep_interval;
@@ -75,7 +155,7 @@ public:
 
 		thr.join();
 
-		assert( task_queue.size() == 0 );
+		assert( task_queue.Empty() );
 	}
 
 	void Schedule(Task task)
@@ -83,7 +163,8 @@ public:
 		TaskInfo info{ std::move(task) };
 
 		std::lock_guard<std::mutex> lock{ task_mut };
-		task_queue.push_back( std::move(info) );
+		//task_queue.push_back( std::move(info) );
+		task_queue.Push( std::move(info) );
 		cond.notify_all();
 	}
 
@@ -96,7 +177,8 @@ public:
 		std::lock_guard<std::mutex> lock{ task_mut };
 		min_sleep_interval = std::min( min_sleep_interval, time_ms );
 
-		task_queue.push_back( std::move(info) );
+		//task_queue.push_back( std::move(info) );
+		task_queue.Push( std::move(info) );
 		cond.notify_all();
 	}
 
@@ -117,7 +199,7 @@ private:
 
 			auto tasks = WaitForTasks();
 
-			if ( tasks.size() == 0 )
+			if ( tasks.Empty() )
 				continue;
 
 			auto next_tasks = ProcessTasks( std::move(tasks) );
@@ -128,52 +210,52 @@ private:
 		ProcessRemainingTasks();
 	}
 
-	std::vector<TaskInfo>
+	TaskInfoQueue
 	WaitForTasks()
 	{
 		std::unique_lock<std::mutex> lock{ task_mut };
 
-		auto cur_size = task_queue.size();
+		//auto cur_size = task_queue.size();
 		auto wakeup_time = Clock::now() + min_sleep_interval;
 
 		if ( min_sleep_interval > Interval(0) ) {
 			cond.wait_for( lock, min_sleep_interval,
 			               [&]() {
-				               return ( task_queue.size() > cur_size
-				                        || Clock::now() > wakeup_time
+				               return ( // task_queue.size() > cur_size ||
+				                        Clock::now() > wakeup_time
 				                        || quit_requested );
 			               } );
 		} else {
 			cond.wait( lock,
 			           [&]() {
-				           return task_queue.size() > 0 || quit_requested;
+				           return !task_queue.Empty() || quit_requested;
 			           } );
 		}
 
-		if ( task_queue.size() == 0 )
+		if ( task_queue.Empty() )
 			return {};
 
 		return std::move( task_queue );
 	}
 
-	std::vector<TaskInfo>
-	ProcessTasks( std::vector<TaskInfo>&& tasks ) const
+	TaskInfoQueue
+	ProcessTasks( TaskInfoQueue&& tasks ) const
 	{
-		std::vector<TaskInfo> next_tasks;
+		TaskInfoQueue next_tasks;
 
-		for( auto& cur_info : tasks ) {
-			if( cur_info.interval_ms > Interval(0) && Clock::now() < cur_info.next_invocation ) {
-				next_tasks.push_back( std::move(cur_info) );
+		while( std::unique_ptr<TaskInfo> tip{ tasks.Pop() } ) {
+			if( tip->interval_ms > Interval(0) && Clock::now() < tip->next_invocation ) {
+				next_tasks.Push( tip.release() );
 				continue;
 			}
 
-			auto& cur_task = cur_info.task;
+			auto& cur_task = tip->task;
 			cur_task.Invoke();
 			if ( !cur_task.IsFinished() ) {
 
-				cur_info.next_invocation = Clock::now() + cur_info.interval_ms;
+				tip->next_invocation = Clock::now() + tip->interval_ms;
 
-				next_tasks.push_back( std::move(cur_info) );
+				next_tasks.Push( tip.release() );
 			}
 
 		}
@@ -181,49 +263,54 @@ private:
 		return next_tasks;
 	}
 
-	void EnqueueRemaining( std::vector<TaskInfo>&& next_tasks )
+	void EnqueueRemaining( TaskInfoQueue&& next_tasks )
 	{
 		std::unique_lock<std::mutex> lock{ task_mut };
 
-		task_queue.insert( task_queue.end(), next_tasks.begin(), next_tasks.end() );
+		while( auto tip = next_tasks.Pop() )
+			task_queue.Push( tip );
 
-		auto min_interval_it =
-			std::min_element( task_queue.begin(),
-			                  task_queue.end(),
-			                  [](const TaskInfo& t1,
-			                     const TaskInfo& t2)
-			                  {
-				                  return t1.interval_ms < t2.interval_ms;
-			                  }
-			                );
+		// auto min_interval_it =
+		// 	std::min_element( task_queue.begin(),
+		// 	                  task_queue.end(),
+		// 	                  [](const TaskInfo& t1,
+		// 	                     const TaskInfo& t2)
+		// 	                  {
+		// 		                  return t1.interval_ms < t2.interval_ms;
+		// 	                  }
+		// 	                );
 
-		if ( min_interval_it == task_queue.end() )
-			return;
+		// if ( min_interval_it == task_queue.end() )
+		// 	return;
 
-		min_sleep_interval = min_interval_it->interval_ms;
+		// min_sleep_interval = min_interval_it->interval_ms;
+
+		// TODO: haha.
+		min_sleep_interval = std::chrono::milliseconds(10);
 	}
 
 	void ProcessRemainingTasks()
 	{
 		// TODO: refactor this nicely
 		// before exiting the thread, run any tasks left in queue
-		std::vector<TaskInfo> tasks;
+		TaskInfoQueue tasks;
 
 		for ( std::unique_lock<std::mutex> lock{ task_mut };
-		      task_queue.size() != 0 || tasks.size() != 0;
+		      !task_queue.Empty() || !tasks.Empty();
 		    )
 		{
-			if ( task_queue.size() )
-				std::move( task_queue.begin(), task_queue.end(), std::back_inserter(tasks) );
-			task_queue.clear();
-
-			assert( task_queue.size() == 0 );
+			while( auto tip = task_queue.Pop() )
+				tasks.Push( tip );
 
 			lock.unlock();
 
-			tasks = ProcessTasks( std::move(tasks) );
+			TaskInfoQueue next_tasks = ProcessTasks( std::move(tasks) );
 
 			lock.lock();
+
+			while( auto tip = next_tasks.Pop() )
+				tasks.Push( tip );
+
 		}
 	}
 };
