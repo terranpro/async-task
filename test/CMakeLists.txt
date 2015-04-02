@@ -9,8 +9,9 @@ IF( CMAKE_ASYNC_COROUTINES )
     )
 ENDIF()
 
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_DEBUG_CXX_FLAGS} -gdwarf-2 -O1")
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_DEBUG_CXX_FLAGS} -O1 -rdynamic -pg")
 
 TARGET_LINK_LIBRARIES( async-test
-  ${pkg-glib_LIBRARIES}
+  #  ${pkg-glib_LIBRARIES}
+  -pthread
   )

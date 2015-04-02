@@ -3,7 +3,7 @@
 //#include "Await.hpp"
 #include "AsyncPtr.hpp"
 #include "ThreadExecutor.hpp"
-#include "GlibExecutor.hpp"
+//#include "GlibExecutor.hpp"
 
 #include <iostream>
 #include <fstream>
@@ -570,6 +570,15 @@ void chain(as::Executor& ex, unsigned int i)
 		as::async( ex, chain, std::ref(ex), i + 1);
 }
 
+as::TaskResult<void>
+channel_chain(as::Executor& ex, unsigned int i)
+{
+	if (i < iterations)
+		as::async( ex, channel_chain, std::ref(ex), i + 1);
+
+	return as::cancel;
+}
+
 void function_context_switch_test()
 {
 	const int chains = 4;
@@ -581,7 +590,7 @@ void function_context_switch_test()
 		as::ThreadExecutor ex;
 
 		for( int i = 0; i < chains; ++i )
-			as::async( ex, [&]() { chain(ex, 0); } );
+			as::post( ex, [&]() { chain(ex, 0); } );
 	}
   clock::duration elapsed = clock::now() - start;
 
@@ -597,6 +606,10 @@ void function_context_switch_test()
   std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(per_iteration).count() << "\n";
   std::cout << "switches per second: ";
   std::cout << (std::chrono::seconds(1) / per_iteration) << "\n";
+}
+
+void post_test()
+{
 }
 
 int main(int argc, char *argv[])
@@ -622,6 +635,8 @@ int main(int argc, char *argv[])
 	// sync_test();
 
 	function_context_switch_test();
+
+	post_test();
 
 	return 0;
 }

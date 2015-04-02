@@ -268,11 +268,6 @@ public:
 	}
 };
 
-Executor& Executor::GetDefault()
-{
-	return GlibExecutor::GetDefault();
-}
-
 } // namespace as
 
 #endif // AS_GLIB_EXECUTOR_HPP

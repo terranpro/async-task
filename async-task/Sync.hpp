@@ -25,8 +25,8 @@ auto sync(Executor& context, Func&& func, Args&&... args)
 		return std::forward<Func>(func)( std::forward<Args>(args)... );
 
 
-	auto timpl = make_task<TaskImpl>( std::forward<Func>(func),
-	                                  std::forward<Args>(args)... );
+	auto timpl = make_task<TaskImplBase>( std::forward<Func>(func),
+	                                      std::forward<Args>(args)... );
 
 	context.Schedule( {timpl} );
 

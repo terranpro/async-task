@@ -53,17 +53,17 @@ class ThreadExecutorImpl
 	{
 		TaskInfo *head;
 		TaskInfo *tail;
+		size_t count;
 
 	public:
 		TaskInfoQueue()
 			: head(nullptr)
 			, tail(nullptr)
+			, count(0)
 		{}
 
 		~TaskInfoQueue()
 		{
-			int i = 0;
-
 			while( auto tip = Pop() )
 				delete tip;
 		}
@@ -71,9 +71,11 @@ class ThreadExecutorImpl
 		TaskInfoQueue(TaskInfoQueue&& other)
 			: head( other.head )
 			, tail( other.tail )
+			, count( other.count )
 		{
 			other.head = nullptr;
 			other.tail = nullptr;
+			other.count = 0;
 		}
 
 		TaskInfoQueue(TaskInfoQueue const&) = delete;
@@ -89,6 +91,8 @@ class ThreadExecutorImpl
 				head = head->next;
 
 				tip->next = nullptr;
+
+				--count;
 
 				return tip;
 			}
@@ -110,11 +114,18 @@ class ThreadExecutorImpl
 				tail->next = tip;
 				tail = tip;
 			}
+
+			++count;
 		}
 
 		bool Empty() const
 		{
 			return head == tail && tail == nullptr;
+		}
+
+		size_t Count() const
+		{
+			return count;
 		}
 	};
 
@@ -123,24 +134,21 @@ class ThreadExecutorImpl
 
 	};
 
-	std::thread thr;
-	std::mutex task_mut;
-	// std::vector<TaskInfo> task_queue;
-
-	TaskInfoQueue task_queue;
-
-	std::condition_variable cond;
 	std::atomic<bool> quit_requested;
+	TaskInfoQueue task_queue;
+	std::mutex task_mut;
+	std::condition_variable cond;
 	Interval min_sleep_interval;
+	std::thread thr;
 
 public:
 	ThreadExecutorImpl()
-		: thr()
-		, task_mut()
+		: quit_requested(false)
 		, task_queue()
+		, task_mut()
 		, cond()
-		, quit_requested(false)
 		, min_sleep_interval(-1)
+		, thr()
 	{
 		thr = std::thread( &ThreadExecutorImpl::ThreadEntryPoint, this );
 	}
@@ -195,22 +203,21 @@ public:
 private:
 	void ThreadEntryPoint()
 	{
-		while( !quit_requested ) {
-
-			auto tasks = WaitForTasks();
-
-			if ( tasks.Empty() )
-				continue;
-
-			auto next_tasks = ProcessTasks( std::move(tasks) );
-
-			EnqueueRemaining( std::move(next_tasks) );
-		}
-
-		ProcessRemainingTasks();
+		while( !quit_requested || !task_queue.Empty() )
+			DoIteration();
 	}
 
-	TaskInfoQueue
+	void DoIteration()
+	{
+		auto lock = WaitForTasks();
+
+		if ( task_queue.Empty() )
+			return;
+
+		DoProcessTasks( std::move(lock) );
+	}
+
+	std::unique_lock<std::mutex>
 	WaitForTasks()
 	{
 		std::unique_lock<std::mutex> lock{ task_mut };
@@ -232,86 +239,47 @@ private:
 			           } );
 		}
 
-		if ( task_queue.Empty() )
-			return {};
-
-		return std::move( task_queue );
+		return lock;
 	}
 
-	TaskInfoQueue
-	ProcessTasks( TaskInfoQueue&& tasks ) const
+	void DoProcessTasks( std::unique_lock<std::mutex> lock )
 	{
-		TaskInfoQueue next_tasks;
+		auto job_count = task_queue.Count();
 
-		while( std::unique_ptr<TaskInfo> tip{ tasks.Pop() } ) {
-			if( tip->interval_ms > Interval(0) && Clock::now() < tip->next_invocation ) {
-				next_tasks.Push( tip.release() );
-				continue;
-			}
-
-			auto& cur_task = tip->task;
-			cur_task.Invoke();
-			if ( !cur_task.IsFinished() ) {
-
-				tip->next_invocation = Clock::now() + tip->interval_ms;
-
-				next_tasks.Push( tip.release() );
-			}
-
-		}
-
-		return next_tasks;
-	}
-
-	void EnqueueRemaining( TaskInfoQueue&& next_tasks )
-	{
-		std::unique_lock<std::mutex> lock{ task_mut };
-
-		while( auto tip = next_tasks.Pop() )
-			task_queue.Push( tip );
-
-		// auto min_interval_it =
-		// 	std::min_element( task_queue.begin(),
-		// 	                  task_queue.end(),
-		// 	                  [](const TaskInfo& t1,
-		// 	                     const TaskInfo& t2)
-		// 	                  {
-		// 		                  return t1.interval_ms < t2.interval_ms;
-		// 	                  }
-		// 	                );
-
-		// if ( min_interval_it == task_queue.end() )
-		// 	return;
-
-		// min_sleep_interval = min_interval_it->interval_ms;
-
-		// TODO: haha.
-		min_sleep_interval = std::chrono::milliseconds(10);
-	}
-
-	void ProcessRemainingTasks()
-	{
-		// TODO: refactor this nicely
-		// before exiting the thread, run any tasks left in queue
-		TaskInfoQueue tasks;
-
-		for ( std::unique_lock<std::mutex> lock{ task_mut };
-		      !task_queue.Empty() || !tasks.Empty();
-		    )
-		{
-			while( auto tip = task_queue.Pop() )
-				tasks.Push( tip );
+		while( std::unique_ptr<TaskInfo> tip{ task_queue.Pop() } ) {
 
 			lock.unlock();
 
-			TaskInfoQueue next_tasks = ProcessTasks( std::move(tasks) );
+			auto fin = DoProcessTask( tip.get() );
+
+			--job_count;
+
+			if ( !job_count )
+				return;
 
 			lock.lock();
 
-			while( auto tip = next_tasks.Pop() )
-				tasks.Push( tip );
-
+			if ( !fin )
+				task_queue.Push( tip.release() );
 		}
+	}
+
+	bool DoProcessTask( TaskInfo *tip )
+	{
+		if( tip->interval_ms > Interval(0) && Clock::now() < tip->next_invocation ) {
+			return false;
+		}
+
+		auto& cur_task = tip->task;
+		cur_task.Invoke();
+		if ( !cur_task.IsFinished() ) {
+
+			tip->next_invocation = Clock::now() + tip->interval_ms;
+
+			return false;
+		}
+
+		return true;
 	}
 };
 
@@ -352,6 +320,13 @@ public:
 		return impl->IsCurrent();
 	}
 };
+
+Executor& Executor::GetDefault()
+{
+	static ThreadExecutor ex;
+
+	return ex;
+}
 
 } // namespace as
 

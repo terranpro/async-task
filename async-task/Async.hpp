@@ -11,7 +11,7 @@
 #ifndef AS_ASYNC_HPP
 #define AS_ASYNC_HPP
 
-#include "GlibExecutor.hpp"
+#include "TaskFuture.hpp"
 #include "ThreadExecutor.hpp"
 
 #include <atomic>
@@ -27,11 +27,11 @@ template<class Func, class... Args>
 TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
 async(Executor& context, Func&& func, Args&&... args)
 {
-	auto timpl = make_task<TaskImpl>( std::forward<Func>(func),
-	                                  std::forward<Args>(args)... );
+	auto timpl = make_task<TaskImplBase>( std::forward<Func>(func),
+	                                      std::forward<Args>(args)... );
 	context.Schedule( {timpl} );
 
-	return { timpl->GetControlBlock() };
+	return { std::move(timpl)->GetControlBlock() };
 }
 
 /// Dispatch a callback in thread; overload for shared_ptr context
@@ -47,15 +47,19 @@ template<class Func, class... Args>
 TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
 async(Func&& func, Args&&... args)
 {
-	// TODO: examine why launching 48+ GlibExecutor's might deadlock on
-	// Cygwin; replaced default with ThreadExecutor's to start
-
-	GlibExecutor c;
-	//ThreadExecutor c;
+	ThreadExecutor c;
 
 	return async( c,
 	              std::forward<Func>(func),
 	              std::forward<Args>(args)... );
+}
+
+template<class Func>
+void post(Executor& ex, Func&& func)
+{
+	auto impl = std::make_shared< TaskImplBase<void, PostInvoker<void> > >( std::forward<Func>(func) );
+
+	ex.Schedule( { impl } );
 }
 
 } // namespace as

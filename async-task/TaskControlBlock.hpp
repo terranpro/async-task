@@ -21,6 +21,41 @@
 
 namespace as {
 
+template<class Ret>
+struct AsyncInvoker
+{};
+
+template<class Ret>
+struct PostInvoker;
+
+template<>
+struct PostInvoker<void>
+{
+	typedef void result_type;
+	typedef void reference_type;
+
+	std::function<void()> taskfunc;
+
+	template<class Func, class... Args>
+	PostInvoker(Func&& func, Args&&... args)
+		: taskfunc( std::bind( std::forward<Func>(func),
+		                       std::forward<Args>(args)... ) )
+	{}
+
+	void operator()()
+	{
+		assert( taskfunc );
+
+		taskfunc();
+	}
+
+	bool finished() const
+	{
+		return true;
+	}
+};
+
+
 template<class Ret, class Enable = void>
 struct TaskInvoker;
 
@@ -43,16 +78,19 @@ struct TaskInvoker<Ret,
 		, result()
 	{}
 
-	template<class Promise>
-	void RunHelper( Promise& promise )
+	void operator()()
 	{
 		assert( taskfunc );
 
 		result.reset( new Ret{ taskfunc() } );
-		promise.set_value( *result );
 	}
 
-	bool IsSet() const
+	result_type get() const
+	{
+		return *result;
+	}
+
+	bool finished() const
 	{
 		return result != nullptr;
 	}
@@ -78,43 +116,43 @@ struct TaskInvoker<void>
 		, is_set(false)
 	{}
 
-	template<class Promise>
-	void RunHelper( Promise& promise )
+	void operator()()
 	{
 		taskfunc();
 
-		promise.set_value();
 		is_set = true;
 	}
 
-	bool IsSet() const
+	void get() const
+	{}
+
+	bool finished() const
 	{
 		return is_set;
 	}
 };
 
-template<class T>
+template< class T, class Invoker = TaskInvoker<T> >
 struct TaskControlBlock
-	: public TaskInvoker<T>
 {
-	typedef TaskInvoker<T> base_type;
+	typedef typename Invoker::result_type result_type;
+	typedef typename Invoker::reference_type reference_type;
 
-	typedef typename base_type::result_type result_type;
-	typedef typename base_type::reference_type reference_type;
-
-	std::promise<reference_type> result_promise;
-	std::shared_future<reference_type> result_future;
+	Invoker invoker;
+	std::mutex mut;
+	std::condition_variable cond;
 
 	TaskControlBlock()
-		: result_promise()
-		, result_future( result_promise.get_future() )
+		: invoker()
+		, mut()
+		, cond()
 	{}
 
 	template<class Func>
 	explicit TaskControlBlock(Func&& func)
-		: TaskInvoker<T>( std::forward<Func>(func) )
-		, result_promise()
-		, result_future( result_promise.get_future() )
+		: invoker( std::forward<Func>(func) )
+		, mut()
+		, cond()
 	{}
 
 	void Run()
@@ -122,39 +160,89 @@ struct TaskControlBlock
 		if ( IsFinished() )
 			return;
 
-		base_type::RunHelper( result_promise );
+		invoker();
+
+		cond.notify_all();
 	}
 
 	void Cancel()
 	{
-		decltype(result_future) invalidate;
-		result_future = std::move(invalidate);
 	}
 
 	bool Valid() const
 	{
-		return result_future.valid();
+		return true;
 	}
 
 	bool IsFinished() const
 	{
-		return Valid() == false || base_type::IsSet();
+		return Valid() == false || invoker.finished();
 	}
 
 	result_type Get()
 	{
-		return result_future.get();
+		std::unique_lock<std::mutex> lock{ mut };
+		cond.wait( lock, [=]() { return invoker.finished(); } );
+		return invoker.get();
 	}
 
 	void Wait()
 	{
-		result_future.wait();
+		std::unique_lock<std::mutex> lock{ mut };
+		cond.wait( lock, [=]() { return invoker.finished(); } );
 	}
 
 	template<class Rep, class Period>
 	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
 	{
-		return static_cast<WaitStatus>( static_cast<int>( result_future.wait_for( dur ) ) );
+		std::unique_lock<std::mutex> lock{ mut };
+		return cond.wait_for( lock, dur, [=]() { return invoker.finished(); } )
+			? WaitStatus::Ready
+			: WaitStatus::Timeout;
+	}
+};
+
+template<class T>
+struct TaskControlBlock< T, PostInvoker<T> >
+{
+	typedef PostInvoker<T> Invoker;
+
+	typedef typename Invoker::result_type result_type;
+	typedef typename Invoker::reference_type reference_type;
+
+	Invoker invoker;
+	bool finished;
+
+	TaskControlBlock()
+		: invoker()
+		, finished(false)
+	{}
+
+	template<class Func>
+	explicit TaskControlBlock(Func&& func)
+		: invoker( std::forward<Func>(func) )
+	{}
+
+	void Run()
+	{
+		if ( IsFinished() )
+			return;
+
+		invoker();
+		finished = true;
+	}
+
+	void Cancel()
+	{}
+
+	bool IsFinished() const
+	{
+		return finished;
+	}
+
+	result_type Get()
+	{
+		return;
 	}
 };
 
@@ -190,6 +278,8 @@ struct TaskControlBlock< TaskResult<T> >
 		} else if ( fr.status == TaskStatus::Canceled ) {
 
 			channel.Cancel();
+		} else {
+			// Do nothing - TaskStatus::Repeat implies not finished
 		}
 	}
 

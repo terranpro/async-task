@@ -16,6 +16,7 @@
 #include <functional>
 #include <memory>
 #include <chrono>
+#include <typeinfo>
 
 namespace as {
 
@@ -31,6 +32,13 @@ public:
 	virtual bool IsCurrent() const = 0;
 
 	static Executor& GetDefault();
+
+	template<class Work>
+	void AddWork(Work&& work);
+
+	const std::type_info& Type() const;
+  template <class ExecutorType> ExecutorType* Target();
+  template <class ExecutorType> const ExecutorType* Target() const;
 };
 
 } // namespace as

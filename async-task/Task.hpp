@@ -12,9 +12,6 @@
 #define AS_TASK_HPP
 
 #include <memory>
-#include <future>
-#include <vector>
-#include <functional>
 
 // TODO: enable when platform boost supports context
 //#undef AS_USE_COROUTINE_TASKS
@@ -30,45 +27,10 @@
 
 namespace as {
 
-template<class T>
-class TaskFuture
-{
-	std::shared_ptr< TaskControlBlock<T> > ctrl;
-
-public:
-	TaskFuture() = default;
-
-	TaskFuture( std::shared_ptr<TaskControlBlock<T> > ctrl)
-		: ctrl(ctrl)
-	{}
-
-	typename TaskControlBlock<T>::result_type
-	Get()
-	{
-		return ctrl->Get();
-	}
-
-	bool Valid() const
-	{
-		return ctrl && ctrl->Valid();
-	}
-
-	void Wait() const
-	{
-		return ctrl->Wait();
-	}
-
-	template<class Rep, class Period>
-	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
-	{
-		return ctrl->WaitFor( dur );
-	}
-};
-
 class Task
 {
 private:
-	std::shared_ptr<TaskImplBase> impl;
+	std::shared_ptr<TaskImpl> impl;
 
 	friend class ThreadExecutorImpl;
 
@@ -79,7 +41,7 @@ public:
 public:
 	Task() = default;
 
-	Task(std::shared_ptr<TaskImplBase> impl)
+	Task(std::shared_ptr<TaskImpl> impl)
 		: impl(impl)
 	{}
 
@@ -93,7 +55,7 @@ public:
 
 	void Invoke()
 	{
-		impl->Invoke();
+		(*impl)();
 	}
 
 	void Yield()

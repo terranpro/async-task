@@ -18,37 +18,45 @@
 
 namespace as {
 
-class TaskImplBase
+class TaskImpl
 {
 public:
-	virtual ~TaskImplBase() {}
+	virtual ~TaskImpl() {}
 
-	virtual void Invoke() = 0;
+	virtual void operator()() = 0;
 	virtual void Yield() = 0;
 	virtual void Cancel() = 0;
 	virtual bool IsFinished() const = 0;
 };
 
-template<class Ret>
-class TaskImpl
-	: public TaskImplBase
+// template<class Invoker, class Result>
+
+template< class Ret, class Invoker = TaskInvoker<Ret> >
+class TaskImplBase
+	: public TaskImpl
 {
 protected:
-	std::shared_ptr< TaskControlBlock<Ret> > ctrl;
+	// Invoker invoker;
+	// Result result;
+	std::shared_ptr< TaskControlBlock<Ret, Invoker> > ctrl;
 
 public:
-	TaskImpl() = default;
+	TaskImplBase() = default;
 
 	template<class Func, class... Args>
-	TaskImpl( Func&& func, Args&&... args )
-		: ctrl( std::make_shared< TaskControlBlock<Ret> >(
+	TaskImplBase( Func&& func, Args&&... args )
+		: ctrl( std::make_shared< TaskControlBlock<Ret, Invoker> >(
 			        std::bind(std::forward<Func>(func), std::forward<Args>(args)... ) ) )
 	{}
 
-	virtual ~TaskImpl()
+	template<class _Invoker, class _Result>
+	TaskImplBase( _Invoker invoker, _Result result )
 	{}
 
-	virtual void Invoke()
+	virtual ~TaskImplBase()
+	{}
+
+	virtual void operator()()
 	{
 		ctrl->Run();
 	}
@@ -72,7 +80,7 @@ public:
 	}
 };
 
-template< template<class> class TaskType, class Func, class... Args>
+template< template<class...> class TaskType, class Func, class... Args>
 std::shared_ptr< TaskType<decltype( std::declval<Func>()( std::declval<Args>()... ) )> >
 make_task(Func&& func, Args&&... args)
 {

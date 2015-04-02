@@ -13,6 +13,7 @@
 
 #include <memory>
 #include <type_traits>
+#include <future>
 
 namespace as {
 

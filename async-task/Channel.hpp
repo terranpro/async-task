@@ -15,6 +15,7 @@
 #include <future>
 #include <mutex>
 #include <condition_variable>
+#include <vector>
 
 #include "TaskStatus.hpp"
 
