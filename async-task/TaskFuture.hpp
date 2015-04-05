@@ -20,36 +20,10 @@ namespace as {
 template<class T>
 class TaskFuture
 {
-	std::shared_ptr< TaskControlBlock<T> > ctrl;
 
 public:
 	TaskFuture() = default;
 
-	TaskFuture( std::shared_ptr<TaskControlBlock<T> > ctrl)
-		: ctrl(ctrl)
-	{}
-
-	typename TaskControlBlock<T>::result_type
-	Get()
-	{
-		return ctrl->Get();
-	}
-
-	bool Valid() const
-	{
-		return ctrl && ctrl->Valid();
-	}
-
-	void Wait() const
-	{
-		return ctrl->Wait();
-	}
-
-	template<class Rep, class Period>
-	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
-	{
-		return ctrl->WaitFor( dur );
-	}
 };
 
 } // namespace as

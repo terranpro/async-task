@@ -22,10 +22,35 @@
 #include <chrono>
 //#include <vector>
 #include <algorithm>
+#include <deque>
 
 #include <cassert>
 
 namespace as {
+
+struct ThreadWork
+{
+	virtual ~ThreadWork() {}
+	virtual bool operator()() = 0;
+};
+
+template<class Func>
+struct ThreadWorkImpl
+	: public ThreadWork
+{
+	Func func;
+
+	ThreadWorkImpl(Func f)
+		: func( std::move(f) )
+	{}
+
+	virtual bool operator()()
+	{
+		if ( func.Invoke() == TaskStatus::Finished )
+			return true;
+		return false;
+	}
+};
 
 class ThreadExecutorImpl
 {
@@ -33,109 +58,36 @@ class ThreadExecutorImpl
 	typedef std::chrono::time_point<Clock> TimePoint;
 	typedef std::chrono::milliseconds Interval;
 
-	struct TaskInfo
+	template<class T>
+	struct JobQueue2
 	{
-		Task task;
-		TimePoint next_invocation;
-		Interval interval_ms;
-		TaskInfo *next;
+		std::deque< std::unique_ptr<T> > que;
 
-		TaskInfo(Task&& task)
-			: task( std::move(task) )
-			, next_invocation()
-			, interval_ms(0)
-			, next(nullptr)
-		{}
-
-	};
-
-	class TaskInfoQueue
-	{
-		TaskInfo *head;
-		TaskInfo *tail;
-		size_t count;
-
-	public:
-		TaskInfoQueue()
-			: head(nullptr)
-			, tail(nullptr)
-			, count(0)
-		{}
-
-		~TaskInfoQueue()
+		T *Pop()
 		{
-			while( auto tip = Pop() )
-				delete tip;
+			T *front = que.front().release();
+			que.pop_front();
+			return front;
 		}
 
-		TaskInfoQueue(TaskInfoQueue&& other)
-			: head( other.head )
-			, tail( other.tail )
-			, count( other.count )
+		void Push(T *obj)
 		{
-			other.head = nullptr;
-			other.tail = nullptr;
-			other.count = 0;
-		}
-
-		TaskInfoQueue(TaskInfoQueue const&) = delete;
-		TaskInfoQueue& operator=(TaskInfoQueue const&) = delete;
-
-	public:
-		TaskInfo *Pop()
-		{
-			if ( head ) {
-				auto tip = head;
-				if ( head == tail )
-					tail = head->next;
-				head = head->next;
-
-				tip->next = nullptr;
-
-				--count;
-
-				return tip;
-			}
-
-			return nullptr;
-		}
-
-		void Push(TaskInfo&& ti)
-		{
-			auto tip = new TaskInfo( std::move(ti) );
-			Push(tip);
-		}
-
-		void Push(TaskInfo *tip)
-		{
-			if ( !tail ) {
-				head = tail = tip;
-			} else {
-				tail->next = tip;
-				tail = tip;
-			}
-
-			++count;
-		}
-
-		bool Empty() const
-		{
-			return head == tail && tail == nullptr;
+			que.emplace_back( obj );
 		}
 
 		size_t Count() const
 		{
-			return count;
+			return que.size();
+		}
+
+		bool Empty() const
+		{
+			return que.empty();
 		}
 	};
 
-	struct Context
-	{
-
-	};
-
 	std::atomic<bool> quit_requested;
-	TaskInfoQueue task_queue;
+	JobQueue2<ThreadWork> task_queue;
 	std::mutex task_mut;
 	std::condition_variable cond;
 	Interval min_sleep_interval;
@@ -168,26 +120,23 @@ public:
 
 	void Schedule(Task task)
 	{
-		TaskInfo info{ std::move(task) };
-
 		std::lock_guard<std::mutex> lock{ task_mut };
 		//task_queue.push_back( std::move(info) );
-		task_queue.Push( std::move(info) );
+		task_queue.Push( new ThreadWorkImpl<Task>{ std::move(task) } );
+		cond.notify_all();
+	}
+
+	template<class Handler>
+	void Schedule(TaskImplBase<Handler>&& ti)
+	{
+		std::lock_guard<std::mutex> lock{ task_mut };
+		//task_queue.push_back( std::move(info) );
+		task_queue.Push( new ThreadWorkImpl<TaskImplBase<Handler> >{ std::move(ti) } );
 		cond.notify_all();
 	}
 
 	void ScheduleAfter(Task task, std::chrono::milliseconds time_ms)
 	{
-		TaskInfo info{ std::move(task) };
-		info.next_invocation = Clock::now() + time_ms;
-		info.interval_ms = time_ms;
-
-		std::lock_guard<std::mutex> lock{ task_mut };
-		min_sleep_interval = std::min( min_sleep_interval, time_ms );
-
-		//task_queue.push_back( std::move(info) );
-		task_queue.Push( std::move(info) );
-		cond.notify_all();
 	}
 
 	void Iteration()
@@ -222,22 +171,10 @@ private:
 	{
 		std::unique_lock<std::mutex> lock{ task_mut };
 
-		//auto cur_size = task_queue.size();
-		auto wakeup_time = Clock::now() + min_sleep_interval;
-
-		if ( min_sleep_interval > Interval(0) ) {
-			cond.wait_for( lock, min_sleep_interval,
-			               [&]() {
-				               return ( // task_queue.size() > cur_size ||
-				                        Clock::now() > wakeup_time
-				                        || quit_requested );
-			               } );
-		} else {
-			cond.wait( lock,
-			           [&]() {
-				           return !task_queue.Empty() || quit_requested;
-			           } );
-		}
+		cond.wait( lock,
+		           [&]() {
+			           return !task_queue.Empty() || quit_requested;
+		           } );
 
 		return lock;
 	}
@@ -246,7 +183,7 @@ private:
 	{
 		auto job_count = task_queue.Count();
 
-		while( std::unique_ptr<TaskInfo> tip{ task_queue.Pop() } ) {
+		while( std::unique_ptr<ThreadWork> tip{ task_queue.Pop() } ) {
 
 			lock.unlock();
 
@@ -264,22 +201,9 @@ private:
 		}
 	}
 
-	bool DoProcessTask( TaskInfo *tip )
+	bool DoProcessTask( ThreadWork *tip )
 	{
-		if( tip->interval_ms > Interval(0) && Clock::now() < tip->next_invocation ) {
-			return false;
-		}
-
-		auto& cur_task = tip->task;
-		cur_task.Invoke();
-		if ( !cur_task.IsFinished() ) {
-
-			tip->next_invocation = Clock::now() + tip->interval_ms;
-
-			return false;
-		}
-
-		return true;
+		return (*tip)();
 	}
 };
 
@@ -303,6 +227,12 @@ public:
 	void Schedule(Task task)
 	{
 		impl->Schedule(std::move(task));
+	}
+
+	template<class Handler>
+	void Schedule(TaskImplBase<Handler>&& ti)
+	{
+		impl->Schedule(std::move(ti));
 	}
 
 	void ScheduleAfter(Task task, std::chrono::milliseconds time_ms)

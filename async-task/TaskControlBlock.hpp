@@ -21,298 +21,139 @@
 
 namespace as {
 
-template<class Ret>
-struct AsyncInvoker
-{};
-
-template<class Ret>
-struct PostInvoker;
-
-template<>
-struct PostInvoker<void>
+class Invoker
 {
-	typedef void result_type;
-	typedef void reference_type;
+public:
+	virtual TaskStatus operator()() = 0;
 
-	std::function<void()> taskfunc;
+protected:
+	virtual ~Invoker() {}
+};
 
-	template<class Func, class... Args>
-	PostInvoker(Func&& func, Args&&... args)
-		: taskfunc( std::bind( std::forward<Func>(func),
-		                       std::forward<Args>(args)... ) )
+struct BaseInvokerStorage
+{
+	bool is_set_;
+
+	BaseInvokerStorage()
+		: is_set_(false)
 	{}
 
-	void operator()()
+	void set()
 	{
-		assert( taskfunc );
-
-		taskfunc();
+		is_set_ = true;
 	}
 
-	bool finished() const
+	bool is_set() const
 	{
-		return true;
+		return is_set_;
 	}
 };
 
-
-template<class Ret, class Enable = void>
-struct TaskInvoker;
-
 template<class Ret>
-struct TaskInvoker<Ret,
-         typename std::enable_if< !std::is_abstract<Ret>::value >::type
-        >
+struct InvokerStorage
+	: BaseInvokerStorage
 {
-	typedef Ret& result_type;
-	typedef Ret& reference_type;
+	std::unique_ptr<Ret> res;
 
-	std::function<Ret()> taskfunc;
-	std::unique_ptr<Ret> result;
-
-	TaskInvoker() = default;
-
-	template<class Func>
-	TaskInvoker( Func&& func )
-		: taskfunc( std::forward<Func>(func) )
-		, result()
-	{}
-
-	void operator()()
+	void operator()(std::function<Ret()>& func)
 	{
-		assert( taskfunc );
-
-		result.reset( new Ret{ taskfunc() } );
+		res.reset( new Ret( func() ) );
 	}
 
-	result_type get() const
+	Ret& get() const
 	{
-		return *result;
-	}
-
-	bool finished() const
-	{
-		return result != nullptr;
+		return *res;
 	}
 };
 
 template<>
-struct TaskInvoker<void>
+struct InvokerStorage<void>
+	: BaseInvokerStorage
 {
-	typedef void result_type;
-	typedef void reference_type;
-
-	std::function<void()> taskfunc;
-	std::atomic<bool> is_set;
-
-	TaskInvoker()
-		: taskfunc()
-		, is_set(false)
-	{}
-
-	template<class Func>
-	TaskInvoker( Func&& func )
-		: taskfunc( std::forward<Func>(func) )
-		, is_set(false)
-	{}
-
-	void operator()()
+	void operator()(std::function<void()>& func)
 	{
-		taskfunc();
+		func();
 
-		is_set = true;
+		this->set();
 	}
 
-	void get() const
-	{}
-
-	bool finished() const
-	{
-		return is_set;
-	}
+	void get() const {}
 };
 
-template< class T, class Invoker = TaskInvoker<T> >
-struct TaskControlBlock
+template<class Ret>
+class AsyncResult
 {
-	typedef typename Invoker::result_type result_type;
-	typedef typename Invoker::reference_type reference_type;
-
-	Invoker invoker;
 	std::mutex mut;
 	std::condition_variable cond;
+	InvokerStorage<Ret> storage;
 
-	TaskControlBlock()
-		: invoker()
-		, mut()
-		, cond()
-	{}
-
-	template<class Func>
-	explicit TaskControlBlock(Func&& func)
-		: invoker( std::forward<Func>(func) )
-		, mut()
-		, cond()
-	{}
-
-	void Run()
+public:
+	void operator()(std::function<Ret()>& func)
 	{
-		if ( IsFinished() )
-			return;
+		storage( func );
 
-		invoker();
+		storage.set();
 
 		cond.notify_all();
 	}
 
-	void Cancel()
+	Ret get()
 	{
-	}
-
-	bool Valid() const
-	{
-		return true;
-	}
-
-	bool IsFinished() const
-	{
-		return Valid() == false || invoker.finished();
-	}
-
-	result_type Get()
-	{
-		std::unique_lock<std::mutex> lock{ mut };
-		cond.wait( lock, [=]() { return invoker.finished(); } );
-		return invoker.get();
-	}
-
-	void Wait()
-	{
-		std::unique_lock<std::mutex> lock{ mut };
-		cond.wait( lock, [=]() { return invoker.finished(); } );
-	}
-
-	template<class Rep, class Period>
-	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
-	{
-		std::unique_lock<std::mutex> lock{ mut };
-		return cond.wait_for( lock, dur, [=]() { return invoker.finished(); } )
-			? WaitStatus::Ready
-			: WaitStatus::Timeout;
+		std::unique_lock<std::mutex> lock( mut );
+		cond.wait( lock, [=]() { return storage.is_set(); } );
+		return storage.get();
 	}
 };
 
-template<class T>
-struct TaskControlBlock< T, PostInvoker<T> >
+class PostResult
 {
-	typedef PostInvoker<T> Invoker;
-
-	typedef typename Invoker::result_type result_type;
-	typedef typename Invoker::reference_type reference_type;
-
-	Invoker invoker;
-	bool finished;
-
-	TaskControlBlock()
-		: invoker()
-		, finished(false)
-	{}
-
-	template<class Func>
-	explicit TaskControlBlock(Func&& func)
-		: invoker( std::forward<Func>(func) )
-	{}
-
-	void Run()
+public:
+	template<class Ret>
+	void operator()(std::function<Ret()>& func)
 	{
-		if ( IsFinished() )
-			return;
-
-		invoker();
-		finished = true;
-	}
-
-	void Cancel()
-	{}
-
-	bool IsFinished() const
-	{
-		return finished;
-	}
-
-	result_type Get()
-	{
-		return;
+		func();
 	}
 };
 
-template<class T>
-struct TaskControlBlock< TaskResult<T> >
+struct callable
 {
-	typedef typename Channel<T>::result_type result_type;
+	virtual ~callable() {}
+	virtual void operator()() = 0;
+};
 
-	Channel<T> channel;
-	std::function< TaskResult<T>()> task_func;
+template<class Func>
+struct callable_base
+	: public callable
+{
+	Func func;
 
-	template<class Func>
-	TaskControlBlock(Func&& tfunc)
-		: channel()
-		, task_func(std::forward<Func>(tfunc))
+	callable_base(Func&& f)
+		: func( std::move(f) )
 	{}
 
-	void Run()
+	virtual void operator()()
 	{
-		if ( !channel.IsOpen() )
-			return;
-
-		TaskResult<T> fr = task_func();
-
-		if ( fr.status == TaskStatus::Finished ||
-		     fr.status == TaskStatus::Continuing ) {
-
-			channel.Put( std::move(fr) );
-
-			if ( fr.status == TaskStatus::Finished )
-				channel.Close();
-
-		} else if ( fr.status == TaskStatus::Canceled ) {
-
-			channel.Cancel();
-		} else {
-			// Do nothing - TaskStatus::Repeat implies not finished
-		}
+		func();
 	}
+};
 
-	void Cancel()
-	{
-		channel.Cancel();
-	}
+template<class Ret>
+class BaseInvoker
+	: public Invoker
+{
+	//std::function<Ret()> func;
+	std::unique_ptr<callable> func;
 
-	bool Valid() const
-	{
-		return channel.IsOpen();
-	}
+public:
+	template<class Func>
+	BaseInvoker(Func&& f)
+		: func( new callable_base<Func>( std::forward<Func>(f) ) )
+	{}
 
-	bool IsFinished() const
+	virtual TaskStatus operator()()
 	{
-		return !channel.IsOpen();
-	}
-
-	result_type
-	Get()
-	{
-		return channel.Get();
-	}
-
-	void Wait()
-	{
-		channel.Wait();
-	}
-
-	template<class Rep, class Period>
-	WaitStatus WaitFor( std::chrono::duration<Rep,Period> const& dur ) const
-	{
-		return channel.WaitFor( dur );
+		(*func)();
+		return TaskStatus::Finished;
 	}
 };
 

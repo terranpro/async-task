@@ -27,11 +27,16 @@ template<class Func, class... Args>
 TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
 async(Executor& context, Func&& func, Args&&... args)
 {
-	auto timpl = make_task<TaskImplBase>( std::forward<Func>(func),
-	                                      std::forward<Args>(args)... );
-	context.Schedule( {timpl} );
+	using Ret = decltype( std::declval<Func>()(std::declval<Args>()...) );
 
-	return { std::move(timpl)->GetControlBlock() };
+	auto impl =
+		std::make_shared< TaskImplBase<BaseInvoker<Ret> > >(
+			std::forward<Func>(func),
+			std::forward<Args>(args)... );
+
+	context.Schedule( { impl } );
+
+	return {};
 }
 
 /// Dispatch a callback in thread; overload for shared_ptr context
@@ -55,11 +60,12 @@ async(Func&& func, Args&&... args)
 }
 
 template<class Func>
-void post(Executor& ex, Func&& func)
+void post(ThreadExecutor& ex, Func&& func)
 {
-	auto impl = std::make_shared< TaskImplBase<void, PostInvoker<void> > >( std::forward<Func>(func) );
+	// auto impl = std::make_shared< TaskImplBase<BaseInvoker<void, PostResult>, PostResult > >(
+	// 	std::forward<Func>(func) );
 
-	ex.Schedule( { impl } );
+	ex.Schedule( TaskImplBase< BaseInvoker<void> >( std::forward<Func>(func) ) );
 }
 
 } // namespace as

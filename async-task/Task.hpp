@@ -32,12 +32,6 @@ class Task
 private:
 	std::shared_ptr<TaskImpl> impl;
 
-	friend class ThreadExecutorImpl;
-
-public:
-	struct GenericTag {};
-	struct CoroutineTag {};
-
 public:
 	Task() = default;
 
@@ -53,9 +47,9 @@ public:
 	Task& operator=(Task&&) = default;
 	Task& operator=(Task const&) = default;
 
-	void Invoke()
+	TaskStatus Invoke()
 	{
-		(*impl)();
+		return impl->Invoke();
 	}
 
 	void Yield()
@@ -65,7 +59,7 @@ public:
 
 	bool IsFinished() const
 	{
-		return impl->IsFinished();
+		return true;
 	}
 
 	void Cancel()

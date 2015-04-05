@@ -1,7 +1,7 @@
 #include "Async.hpp"
-#include "Sync.hpp"
+// #include "Sync.hpp"
 //#include "Await.hpp"
-#include "AsyncPtr.hpp"
+// #include "AsyncPtr.hpp"
 #include "ThreadExecutor.hpp"
 //#include "GlibExecutor.hpp"
 
@@ -68,24 +68,24 @@ struct foo
 int foo::obj_cons = 0;
 std::atomic<int> foo::obj_copy{0};
 
-template<class T>
-struct TaskFinisher
-{
-	as::TaskFuture<T> result;
+// template<class T>
+// struct TaskFinisher
+// {
+// 	as::TaskFuture<T> result;
 
-	TaskFinisher(as::TaskFuture<T> result)
-		: result(result)
-	{}
+// 	TaskFinisher(as::TaskFuture<T> result)
+// 		: result(result)
+// 	{}
 
-	TaskFinisher(const TaskFinisher&) = default;
-	TaskFinisher(TaskFinisher&&) = default;
+// 	TaskFinisher(const TaskFinisher&) = default;
+// 	TaskFinisher(TaskFinisher&&) = default;
 
-	~TaskFinisher()
-	{
-		if (result.Valid())
-			result.Get();
-	}
-};
+// 	~TaskFinisher()
+// 	{
+// 		if (result.Valid())
+// 			result.Get();
+// 	}
+// };
 
 /*
 void foo_test()
@@ -496,8 +496,6 @@ void repeated_task_test()
 	assert( x == 5 );
 }
 
-*/
-
 void pipeline_simulation()
 {
 	as::ThreadExecutor t_stage1;
@@ -562,16 +560,24 @@ void sync_test()
 	assert( y == 98 );
 }
 
+*/
+
 const unsigned int iterations = 1000000;
 
-void chain(as::Executor& ex, unsigned int i)
+void chain(as::ThreadExecutor& ex, unsigned int i)
 {
 	if (i < iterations)
 		as::async( ex, chain, std::ref(ex), i + 1);
 }
 
+void post_chain(as::ThreadExecutor& ex, unsigned int i)
+{
+	if (i < iterations)
+		as::post( ex, std::bind(post_chain, std::ref(ex), i + 1 ) );
+}
+
 as::TaskResult<void>
-channel_chain(as::Executor& ex, unsigned int i)
+channel_chain(as::ThreadExecutor& ex, unsigned int i)
 {
 	if (i < iterations)
 		as::async( ex, channel_chain, std::ref(ex), i + 1);
@@ -590,7 +596,7 @@ void function_context_switch_test()
 		as::ThreadExecutor ex;
 
 		for( int i = 0; i < chains; ++i )
-			as::post( ex, [&]() { chain(ex, 0); } );
+			as::async( ex, [&]() { chain(ex, 0); } );
 	}
   clock::duration elapsed = clock::now() - start;
 
@@ -610,6 +616,31 @@ void function_context_switch_test()
 
 void post_test()
 {
+	const int chains = 4;
+
+	using clock = std::chrono::high_resolution_clock;
+
+	clock::time_point start = clock::now();
+	{
+		as::ThreadExecutor ex;
+
+		for( int i = 0; i < chains; ++i )
+			as::post( ex, [&]() { post_chain(ex, 0); } );
+	}
+  clock::duration elapsed = clock::now() - start;
+
+  // account for thread startup/shutdown time
+	clock::time_point base_start = clock::now();
+	{
+		as::ThreadExecutor ex;
+	}
+  clock::duration base_elapsed = clock::now() - base_start;
+
+  std::cout << "time per switch: ";
+  clock::duration per_iteration = (elapsed - base_elapsed) / iterations / chains;
+  std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(per_iteration).count() << "\n";
+  std::cout << "switches per second: ";
+  std::cout << (std::chrono::seconds(1) / per_iteration) << "\n";
 }
 
 int main(int argc, char *argv[])
