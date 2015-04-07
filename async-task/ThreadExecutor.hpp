@@ -127,6 +127,12 @@ class ThreadExecutorImpl
 			other.count = 0;
 		}
 
+		void Steal(IntrusiveJobQueue *que)
+		{
+			while( auto job = que.Pop() )
+				Push( job );
+		}
+
 		const T* Front() const
 		{
 			assert( head );
@@ -136,7 +142,8 @@ class ThreadExecutorImpl
 
 		T *Pop()
 		{
-			assert( head );
+			if ( !head )
+				return nullptr;
 
 			auto tmp = head;
 
@@ -178,7 +185,7 @@ class ThreadExecutorImpl
 	struct Context
 	{
 		Registry<ThreadExecutorImpl, Context> registry;
-		JobQueue<ThreadWork> priv_task_queue;
+		IntrusiveJobQueue<ThreadWork> priv_task_queue;
 		ThreadExecutorImpl *ex;
 
 		Context(ThreadExecutorImpl *ex)
@@ -186,6 +193,17 @@ class ThreadExecutorImpl
 			, priv_task_queue()
 			, ex(ex)
 		{}
+
+		bool StealWork()
+		{
+			if ( ex->task_queue.Empty() )
+				return false;
+
+			while( auto job = ex->task_queue.Pop() )
+				priv_task_queue.Push( job );
+
+			return !priv_task_queue.Empty();
+		}
 	};
 
 	IntrusiveJobQueue<ThreadWork> task_queue;
@@ -244,6 +262,11 @@ public:
 	{
 		auto tw = new ThreadWorkImpl<Handler>{ std::move(ti) };
 
+		if ( auto ctx = Registry<ThreadExecutorImpl, Context>::Current(this) ) {
+			ctx->priv_task_queue.Push( tw );
+			return;
+		}
+
 		std::lock_guard<std::mutex> lock{ task_mut };
 		//task_queue.push_back( std::move(info) );
 		task_queue.Push( tw );
@@ -271,8 +294,17 @@ public:
 
 	void Run()
 	{
-		while( !task_queue.Empty() )
-			DoIteration();
+		Context ctx(this);
+
+		for( std::unique_lock<std::mutex> lock(task_mut);
+		     ctx.StealWork() || !ctx.priv_task_queue.Empty();
+		     lock.lock() )
+		{
+			assert( lock.owns_lock() );
+
+			lock.unlock();
+			DoIteration( &ctx );
+		}
 	}
 
 	void Shutdown()
@@ -290,25 +322,39 @@ public:
 private:
 	void ThreadEntryPoint()
 	{
+		Context ctx(this);
+
 		while( !quit_requested || !task_queue.Empty() )
-			DoIteration();
+			DoIteration( &ctx );
 	}
 
-	void DoIteration()
+	bool DoIteration(Context *ctx)
 	{
-		auto lock = WaitForTasks();
+		auto& jobs = ctx->priv_task_queue;
 
-		if ( task_queue.Empty() )
-			return;
+		if ( ctx->priv_task_queue.Empty() ) {
+			return false;
+		}
 
-		DoProcessTasks( std::move(lock) );
+		auto job_count = jobs.Count();
+
+		while( job_count ) {
+			std::unique_ptr<ThreadWork> tip{ jobs.Pop() };
+
+			--job_count;
+
+			auto fin = DoProcessTask( tip.get() );
+			if ( !fin )
+				jobs.Push( tip.release() );
+		}
+
+		return true;
 	}
 
 	std::unique_lock<std::mutex>
 	WaitForTasks()
 	{
 		std::unique_lock<std::mutex> lock{ task_mut };
-
 		cond.wait( lock,
 		           [&]() {
 			           return !task_queue.Empty() || quit_requested;

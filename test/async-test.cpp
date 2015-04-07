@@ -710,7 +710,7 @@ int main(int argc, char *argv[])
 
 	// sync_test();
 
-	//function_context_switch_test();
+	function_context_switch_test();
 
 	post_test();
 

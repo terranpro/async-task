@@ -31,6 +31,9 @@ public:
 	virtual void Iteration() = 0;
 	virtual bool IsCurrent() const = 0;
 
+	virtual void Run() = 0;
+	virtual void Shutdown() = 0;
+
 	static Executor& GetDefault();
 
 	//virtual void AddWork(std::unique_ptr<Invoker> invoker) {}
