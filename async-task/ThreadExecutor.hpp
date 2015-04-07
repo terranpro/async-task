@@ -23,6 +23,7 @@
 #include <chrono>
 #include <algorithm>
 #include <deque>
+#include <type_traits>
 
 #include <iostream>
 
@@ -71,7 +72,7 @@ class ThreadExecutorImpl
 	template<class T>
 	struct JobQueue
 	{
-		std::deque< std::unique_ptr<T> > que;
+		std::deque< T * > que;
 		//std::vector< std::unique_ptr<T> > que;
 
 		const T* Front() const
@@ -129,7 +130,7 @@ class ThreadExecutorImpl
 
 		void Steal(IntrusiveJobQueue *que)
 		{
-			while( auto job = que.Pop() )
+			while( auto job = que->Pop() )
 				Push( job );
 		}
 
@@ -260,7 +261,20 @@ public:
 	template<class Handler>
 	void Schedule(Handler&& ti)
 	{
-		auto tw = new ThreadWorkImpl<Handler>{ std::move(ti) };
+		struct MyPoolTag
+		{};
+
+		// auto tw = new ThreadWorkImpl<Handler>{ std::move(ti) };
+
+		//using Pool = boost::singleton_pool<MyPoolTag, sizeof( ThreadWorkImpl<Handler> ) >;
+		//void *ptr = static_cast<ThreadWork *>( Pool::malloc() );
+
+		using Pool = boost::fast_pool_allocator< ThreadWorkImpl<Handler> >;
+		void *ptr = static_cast<ThreadWork *>( Pool::allocate() );
+
+		auto tw = new(ptr) ThreadWorkImpl<Handler>{ std::move(ti) };
+
+		assert( tw );
 
 		if ( auto ctx = Registry<ThreadExecutorImpl, Context>::Current(this) ) {
 			ctx->priv_task_queue.Push( tw );
@@ -339,13 +353,18 @@ private:
 		auto job_count = jobs.Count();
 
 		while( job_count ) {
-			std::unique_ptr<ThreadWork> tip{ jobs.Pop() };
+			//std::unique_ptr<ThreadWork> tip{ jobs.Pop() };
+			auto tip = jobs.Pop();
 
 			--job_count;
 
-			auto fin = DoProcessTask( tip.get() );
+			auto fin = DoProcessTask( tip );
 			if ( !fin )
-				jobs.Push( tip.release() );
+				jobs.Push( tip );
+
+			// auto fin = DoProcessTask( tip.get() );
+			// if ( !fin )
+			// 	jobs.Push( tip.release() );
 		}
 
 		return true;
@@ -372,13 +391,14 @@ private:
 		auto job_count = jobs.Count();
 
 		while( job_count ) {
-			std::unique_ptr<ThreadWork> tip{ jobs.Pop() };
+			//std::unique_ptr<ThreadWork> tip{ jobs.Pop() };
+			auto tip = jobs.Pop();
 
-			auto fin = DoProcessTask( tip.get() );
+			auto fin = DoProcessTask( tip );
 
 			if ( !fin ) {
 				lock.lock();
-				task_queue.Push( tip.release() );
+				task_queue.Push( tip );
 				lock.unlock();
 			}
 
