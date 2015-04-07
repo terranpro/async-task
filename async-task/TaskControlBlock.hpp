@@ -105,16 +105,6 @@ public:
 	}
 };
 
-class PostResult
-{
-public:
-	template<class Ret>
-	void operator()(std::function<Ret()>& func)
-	{
-		func();
-	}
-};
-
 struct callable
 {
 	virtual ~callable() {}
@@ -122,12 +112,12 @@ struct callable
 };
 
 template<class Func>
-struct callable_base
+struct callable_impl
 	: public callable
 {
 	Func func;
 
-	callable_base(Func&& f)
+	callable_impl(Func&& f)
 		: func( std::move(f) )
 	{}
 
@@ -137,17 +127,61 @@ struct callable_base
 	}
 };
 
+template<class Func, class... Args>
+std::unique_ptr<callable>
+make_callable( Func&& func, Args&&... args )
+{
+	// auto binder = std::bind( std::forward<Func>(func),
+	//                          std::forward<Args>(args)... );
+
+	return std::unique_ptr<callable>( new callable_impl<Func>( std::forward<Func>(func) ) );
+}
+
+template<class T, class Alloc>
+struct callable_deleter
+{
+	void operator()(T *obj) const
+	{
+		obj->~T();
+		typename Alloc::template rebind<T>::other rebind_alloc;
+		rebind_alloc.deallocate( obj, 1 );
+	}
+};
+
+template<class Alloc>
+using callable_ptr = std::unique_ptr<callable, callable_deleter<callable, Alloc> >;
+
+template<class Alloc, class Func, class... Args>
+std::unique_ptr<callable, callable_deleter<callable, Alloc> >
+make_callable( Func&& func, Args&&... args )
+{
+	auto binder = std::bind( std::forward<Func>(func),
+	                         std::forward<Args>(args)... );
+
+	typename Alloc::template rebind< decltype(binder) >::other rebind_alloc;
+
+	auto ptr = rebind_alloc.allocate(1);
+
+	auto obj = new(ptr) callable_impl<decltype(binder)>( std::move(binder) );
+
+	return callable_ptr< Alloc >( obj );
+}
+
 template<class Ret>
 class BaseInvoker
 	: public Invoker
 {
-	//std::function<Ret()> func;
 	std::unique_ptr<callable> func;
 
 public:
 	template<class Func>
 	BaseInvoker(Func&& f)
-		: func( new callable_base<Func>( std::forward<Func>(f) ) )
+		: func( new callable_impl<Func>( std::move(f) ) )
+	{}
+
+	BaseInvoker(BaseInvoker&&) = default;
+
+	virtual ~BaseInvoker()
 	{}
 
 	virtual TaskStatus operator()()

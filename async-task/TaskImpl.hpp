@@ -16,6 +16,8 @@
 #include <memory>
 #include <functional>
 
+#include <boost/pool/pool_alloc.hpp>
+
 namespace as {
 
 class TaskImpl
@@ -70,6 +72,31 @@ public:
 	{
 	}
 
+};
+
+struct PostInvoker
+	: public TaskImpl
+{
+	std::unique_ptr<callable> func;
+	//callable_ptr< boost::pool_allocator<callable> > func;
+
+	// template<class Func, class... Args>
+	// PostInvoker(Func&& func, Args&&... args)
+	template<class Func>
+	PostInvoker(Func&& func)
+		: func( make_callable( std::forward<Func>(func) ) )
+	{}
+
+	virtual TaskStatus Invoke()
+	{
+		(*func)();
+		return TaskStatus::Finished;
+	}
+
+	virtual void Yield()
+	{}
+	virtual void Cancel()
+	{}
 };
 
 } // namespace as

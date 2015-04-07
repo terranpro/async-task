@@ -14,15 +14,19 @@
 #include "Executor.hpp"
 
 #include "Task.hpp"
+#include "ThreadRegistry.hpp"
 
 #include <thread>
 #include <mutex>
 #include <condition_variable>
 #include <atomic>
 #include <chrono>
-//#include <vector>
 #include <algorithm>
 #include <deque>
+
+#include <iostream>
+
+#include <boost/pool/pool_alloc.hpp>
 
 #include <cassert>
 
@@ -30,6 +34,12 @@ namespace as {
 
 struct ThreadWork
 {
+	ThreadWork *next;
+
+	ThreadWork()
+		: next(nullptr)
+	{}
+
 	virtual ~ThreadWork() {}
 	virtual bool operator()() = 0;
 };
@@ -59,14 +69,22 @@ class ThreadExecutorImpl
 	typedef std::chrono::milliseconds Interval;
 
 	template<class T>
-	struct JobQueue2
+	struct JobQueue
 	{
 		std::deque< std::unique_ptr<T> > que;
+		//std::vector< std::unique_ptr<T> > que;
+
+		const T* Front() const
+		{
+			return que.front().get();
+		}
 
 		T *Pop()
 		{
 			T *front = que.front().release();
 			que.pop_front();
+			//que.erase( que.begin() );
+
 			return front;
 		}
 
@@ -86,24 +104,114 @@ class ThreadExecutorImpl
 		}
 	};
 
-	std::atomic<bool> quit_requested;
-	JobQueue2<ThreadWork> task_queue;
+	template<class T>
+	struct IntrusiveJobQueue
+	{
+		T *head;
+		T *tail;
+		size_t count;
+
+		IntrusiveJobQueue()
+			: head(nullptr)
+			, tail(nullptr)
+			, count(0)
+		{}
+
+		IntrusiveJobQueue(IntrusiveJobQueue&& other)
+			: head( other.head )
+			, tail( other.tail )
+			, count( other.count )
+		{
+			other.head = nullptr;
+			other.tail = nullptr;
+			other.count = 0;
+		}
+
+		const T* Front() const
+		{
+			assert( head );
+
+			return head;
+		}
+
+		T *Pop()
+		{
+			assert( head );
+
+			auto tmp = head;
+
+			if ( head == tail )
+				head = tail = nullptr;
+			else
+				head = head->next;
+
+			--count;
+
+			return tmp;
+		}
+
+		void Push(T *obj)
+		{
+			++count;
+
+			if ( !head ) {
+				head = tail = obj;
+				return;
+			}
+
+			tail->next = obj;
+			tail = obj;
+			obj->next = nullptr;
+		}
+
+		size_t Count() const
+		{
+			return count;
+		}
+
+		bool Empty() const
+		{
+			return head == nullptr;
+		}
+	};
+
+	struct Context
+	{
+		Registry<ThreadExecutorImpl, Context> registry;
+		JobQueue<ThreadWork> priv_task_queue;
+		ThreadExecutorImpl *ex;
+
+		Context(ThreadExecutorImpl *ex)
+			: registry( ex, this )
+			, priv_task_queue()
+			, ex(ex)
+		{}
+	};
+
+	IntrusiveJobQueue<ThreadWork> task_queue;
 	std::mutex task_mut;
 	std::condition_variable cond;
-	Interval min_sleep_interval;
+	std::atomic<bool> quit_requested;
 	std::thread thr;
 
 public:
 	ThreadExecutorImpl()
-		: quit_requested(false)
-		, task_queue()
+		: task_queue()
 		, task_mut()
 		, cond()
-		, min_sleep_interval(-1)
+		, quit_requested(false)
 		, thr()
 	{
 		thr = std::thread( &ThreadExecutorImpl::ThreadEntryPoint, this );
 	}
+
+	ThreadExecutorImpl(std::string)
+		: task_queue()
+		, task_mut()
+		, cond()
+		, quit_requested(false)
+		, thr()
+	{}
 
 	~ThreadExecutorImpl()
 	{
@@ -113,26 +221,38 @@ public:
 			cond.notify_all();
 		}
 
-		thr.join();
+		if ( thr.joinable() )
+			thr.join();
 
 		assert( task_queue.Empty() );
 	}
 
 	void Schedule(Task task)
 	{
+		auto tw = new ThreadWorkImpl<Task>{ std::move(task) };
+
 		std::lock_guard<std::mutex> lock{ task_mut };
 		//task_queue.push_back( std::move(info) );
-		task_queue.Push( new ThreadWorkImpl<Task>{ std::move(task) } );
-		cond.notify_all();
+		task_queue.Push( tw );
+
+		if ( task_queue.Front() == tw )
+			cond.notify_one();
 	}
 
 	template<class Handler>
-	void Schedule(TaskImplBase<Handler>&& ti)
+	void Schedule(Handler&& ti)
 	{
+		auto tw = new ThreadWorkImpl<Handler>{ std::move(ti) };
+
 		std::lock_guard<std::mutex> lock{ task_mut };
 		//task_queue.push_back( std::move(info) );
-		task_queue.Push( new ThreadWorkImpl<TaskImplBase<Handler> >{ std::move(ti) } );
-		cond.notify_all();
+		task_queue.Push( tw );
+
+		// if ( thr.joinable() == false || IsCurrent() )
+		// 	return;
+
+		// if ( task_queue.Front() == tw )
+		// 	cond.notify_one();
 	}
 
 	void ScheduleAfter(Task task, std::chrono::milliseconds time_ms)
@@ -147,6 +267,24 @@ public:
 	bool IsCurrent() const
 	{
 		return thr.get_id() == std::this_thread::get_id();
+	}
+
+	void Run()
+	{
+		while( !task_queue.Empty() )
+			DoIteration();
+	}
+
+	void Shutdown()
+	{
+		{
+			std::unique_lock<std::mutex> lock{ task_mut };
+			assert( thr.joinable() );
+
+			quit_requested = true;
+		}
+
+		thr.join();
 	}
 
 private:
@@ -181,23 +319,24 @@ private:
 
 	void DoProcessTasks( std::unique_lock<std::mutex> lock )
 	{
-		auto job_count = task_queue.Count();
+		IntrusiveJobQueue<ThreadWork> jobs = std::move(task_queue);
 
-		while( std::unique_ptr<ThreadWork> tip{ task_queue.Pop() } ) {
+		lock.unlock();
 
-			lock.unlock();
+		auto job_count = jobs.Count();
+
+		while( job_count ) {
+			std::unique_ptr<ThreadWork> tip{ jobs.Pop() };
 
 			auto fin = DoProcessTask( tip.get() );
 
-			--job_count;
-
-			if ( !job_count )
-				return;
-
-			lock.lock();
-
-			if ( !fin )
+			if ( !fin ) {
+				lock.lock();
 				task_queue.Push( tip.release() );
+				lock.unlock();
+			}
+
+			--job_count;
 		}
 	}
 
@@ -221,6 +360,10 @@ public:
 		: impl( std::make_shared<ThreadExecutorImpl>() )
 	{}
 
+	ThreadExecutor(std::string)
+		: impl( std::make_shared<ThreadExecutorImpl>("haha") )
+	{}
+
 	ThreadExecutor(ThreadExecutor const&) = default;
 	ThreadExecutor& operator=(ThreadExecutor const&) = default;
 
@@ -230,7 +373,7 @@ public:
 	}
 
 	template<class Handler>
-	void Schedule(TaskImplBase<Handler>&& ti)
+	void Schedule(Handler&& ti)
 	{
 		impl->Schedule(std::move(ti));
 	}
@@ -248,6 +391,16 @@ public:
 	bool IsCurrent() const
 	{
 		return impl->IsCurrent();
+	}
+
+	void Run()
+	{
+		return impl->Run();
+	}
+
+	void Shutdown()
+	{
+		return impl->Shutdown();
 	}
 };
 

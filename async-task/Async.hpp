@@ -25,16 +25,13 @@ namespace as {
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext
 template<class Func, class... Args>
 TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
-async(Executor& context, Func&& func, Args&&... args)
+async(ThreadExecutor& context, Func&& func, Args&&... args)
 {
 	using Ret = decltype( std::declval<Func>()(std::declval<Args>()...) );
 
-	auto impl =
-		std::make_shared< TaskImplBase<BaseInvoker<Ret> > >(
-			std::forward<Func>(func),
-			std::forward<Args>(args)... );
-
-	context.Schedule( { impl } );
+	context.Schedule( TaskImplBase<BaseInvoker<Ret> > (
+		                  std::forward<Func>(func),
+		                  std::forward<Args>(args)... ) );
 
 	return {};
 }
@@ -62,10 +59,7 @@ async(Func&& func, Args&&... args)
 template<class Func>
 void post(ThreadExecutor& ex, Func&& func)
 {
-	// auto impl = std::make_shared< TaskImplBase<BaseInvoker<void, PostResult>, PostResult > >(
-	// 	std::forward<Func>(func) );
-
-	ex.Schedule( TaskImplBase< BaseInvoker<void> >( std::forward<Func>(func) ) );
+	ex.Schedule( PostInvoker( std::forward<Func>(func) ) );
 }
 
 } // namespace as
