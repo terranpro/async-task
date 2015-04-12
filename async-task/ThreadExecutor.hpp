@@ -261,18 +261,16 @@ public:
 	template<class Handler>
 	void Schedule(Handler&& ti)
 	{
-		struct MyPoolTag
-		{};
-
-		// auto tw = new ThreadWorkImpl<Handler>{ std::move(ti) };
+		auto tw = new ThreadWorkImpl<Handler>{ std::move(ti) };
 
 		//using Pool = boost::singleton_pool<MyPoolTag, sizeof( ThreadWorkImpl<Handler> ) >;
 		//void *ptr = static_cast<ThreadWork *>( Pool::malloc() );
 
-		using Pool = boost::fast_pool_allocator< ThreadWorkImpl<Handler> >;
-		void *ptr = static_cast<ThreadWork *>( Pool::allocate() );
-
-		auto tw = new(ptr) ThreadWorkImpl<Handler>{ std::move(ti) };
+		// struct MyPoolTag
+		// {};
+		// using Pool = boost::fast_pool_allocator< ThreadWorkImpl<Handler> >;
+		// void *ptr = static_cast<ThreadWork *>( Pool::allocate() );
+		// auto tw = new(ptr) ThreadWorkImpl<Handler>{ std::move(ti) };
 
 		assert( tw );
 
@@ -353,18 +351,23 @@ private:
 		auto job_count = jobs.Count();
 
 		while( job_count ) {
-			//std::unique_ptr<ThreadWork> tip{ jobs.Pop() };
-			auto tip = jobs.Pop();
+			std::unique_ptr<ThreadWork> tip{ jobs.Pop() };
 
 			--job_count;
 
-			auto fin = DoProcessTask( tip );
-			if ( !fin )
-				jobs.Push( tip );
+			auto fin = DoProcessTask( tip.get() );
 
-			// auto fin = DoProcessTask( tip.get() );
+			if ( !fin )
+				jobs.Push( tip.release() );
+
+			// auto tip = jobs.Pop();
+
+			// --job_count;
+
+			// auto fin = DoProcessTask( tip );
 			// if ( !fin )
-			// 	jobs.Push( tip.release() );
+			// 	jobs.Push( tip );
+
 		}
 
 		return true;
@@ -391,16 +394,23 @@ private:
 		auto job_count = jobs.Count();
 
 		while( job_count ) {
-			//std::unique_ptr<ThreadWork> tip{ jobs.Pop() };
-			auto tip = jobs.Pop();
+			std::unique_ptr<ThreadWork> tip{ jobs.Pop() };
 
-			auto fin = DoProcessTask( tip );
+			auto fin = DoProcessTask( tip.get() );
 
 			if ( !fin ) {
 				lock.lock();
-				task_queue.Push( tip );
+				task_queue.Push( tip.release() );
 				lock.unlock();
 			}
+
+			// auto tip = jobs.Pop();
+			// auto fin = DoProcessTask( tip );
+			// if ( !fin ) {
+			// 	lock.lock();
+			// 	task_queue.Push( tip );
+			// 	lock.unlock();
+			// }
 
 			--job_count;
 		}

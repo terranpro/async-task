@@ -621,6 +621,9 @@ void post_test()
 	for( int i = 0; i < chains; ++i )
 		as::post( ex, [&]() { post_chain(ex, 0); } );
 
+	// as::post( ex, []() { return 10; },
+	//           [](int i) { std::cout << i << " \n"; } );
+
 	clock::time_point start = clock::now();
 	{
 		ex.Run();
@@ -634,59 +637,37 @@ void post_test()
   std::cout << (std::chrono::seconds(1) / per_iteration) << "\n";
 }
 
-std::atomic<int> function_count(0);
+// std::atomic<int> function_count(0);
 
-void function1()
-{
-  ++function_count;
-}
+// void function1()
+// {
+//   ++function_count;
+// }
 
-void invoker_test()
-{
-	auto cable = as::make_callable( function1 );
+// void thread_work_test()
+// {
+// 	auto invoker = as::PostInvoker<as::ThreadExecutor>( function1 );
+// 	as::ThreadWork *work = new as::ThreadWorkImpl< decltype(invoker) >( std::move(invoker) );
 
-	const int chains = 4;
+// 	const int chains = 4;
 
-	using clock = std::chrono::high_resolution_clock;
-	clock::time_point start = clock::now();
-	{
-		for( int c = 0; c < chains; ++c )
-			for( int i = 0; i < iterations; ++i )
-				(*cable)();
-	}
-  clock::duration elapsed = clock::now() - start;
+// 	function_count = 0;
 
-  std::cout << "time per switch: ";
-  clock::duration per_iteration = elapsed / iterations / chains;
-  std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(per_iteration).count() << " ns\n";
+// 	using clock = std::chrono::high_resolution_clock;
+// 	clock::time_point start = clock::now();
+// 	{
+// 		for( int c = 0; c < chains; ++c )
+// 			for( int i = 0; i < iterations; ++i )
+// 				(*work)();
+// 	}
+//   clock::duration elapsed = clock::now() - start;
 
-  assert( function_count == iterations * chains );
-}
+//   std::cout << "time per switch: ";
+//   clock::duration per_iteration = elapsed / iterations / chains;
+//   std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(per_iteration).count() << " ns\n";
 
-void thread_work_test()
-{
-	auto invoker = as::PostInvoker( function1 );
-	as::ThreadWork *work = new as::ThreadWorkImpl< decltype(invoker) >( std::move(invoker) );
-
-	const int chains = 4;
-
-	function_count = 0;
-
-	using clock = std::chrono::high_resolution_clock;
-	clock::time_point start = clock::now();
-	{
-		for( int c = 0; c < chains; ++c )
-			for( int i = 0; i < iterations; ++i )
-				(*work)();
-	}
-  clock::duration elapsed = clock::now() - start;
-
-  std::cout << "time per switch: ";
-  clock::duration per_iteration = elapsed / iterations / chains;
-  std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(per_iteration).count() << " ns\n";
-
-  assert( function_count == iterations * chains );
-}
+//   assert( function_count == iterations * chains );
+// }
 
 int main(int argc, char *argv[])
 {
