@@ -126,7 +126,7 @@ struct ChannelImpl<void>
 	typedef bool result_type;
 
 	std::vector<char> results;
-	std::mutex results_mut;
+	mutable std::mutex results_mut;
 	std::condition_variable results_cond;
 	std::atomic<bool> finished;
 	std::atomic<bool> canceled;
