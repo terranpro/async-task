@@ -12,6 +12,7 @@
 #define AS_TASK_IMPL_HPP
 
 #include "TaskControlBlock.hpp"
+#include "CallableTraits.hpp"
 
 #include <memory>
 #include <functional>
@@ -119,19 +120,44 @@ struct invocation_result_helper<Func, std::tuple<Args...>>
 	typedef decltype( std::declval<Func>()( std::declval<Args>()... ) ) result_type;
 };
 
-template<class Func, class... Args>
+
+template<class Func>
 struct invocation
+{
+	typedef Func func_type;
+	typedef FunctionSignature<Func> signature_type;
+	typedef typename FunctionSignature<Func>::return_type result_type;
+
+	Func func;
+
+	invocation(Func func)
+		: func( std::move(func) )
+	{}
+
+	template<class... A>
+	result_type invoke(A&&... args)
+	{
+		//constexpr int TSize = std::tuple_size< arg_tuple_type >::value;
+		constexpr int TSize = sizeof...( args );
+		typedef std::tuple<A...> arg_tuple_type;
+
+		return invoke_impl<result_type, Func, arg_tuple_type, 0 == TSize, TSize>::call(func, std::make_tuple( std::forward<A>(args)... ) );
+	}
+};
+
+template<class Func, class... Args>
+struct full_invocation
+	: public invocation<Func>
 {
 	typedef std::tuple<Args...> arg_tuple_type;
 
 	typedef decltype( std::declval<Func>()( std::declval<Args>()... ) ) result_type;
 
-	Func func;
 	arg_tuple_type arg_tuple;
 
 	template<class... A>
-	invocation(Func func, A&&... args)
-		: func( std::move(func) )
+	full_invocation(Func func, A&&... args)
+		: invocation<Func>( std::move(func) )
 		, arg_tuple( std::make_tuple<Args...>( std::forward<A>(args)... ) )
 	{}
 
@@ -139,22 +165,16 @@ struct invocation
 	{
 		constexpr int TSize = std::tuple_size< arg_tuple_type >::value;
 
-		return invoke_impl<result_type, Func, arg_tuple_type, 0 == TSize, TSize>::call(func, std::move(arg_tuple) );
-	}
-
-	template<class... A>
-	result_type invoke(A&&... args)
-	{
-		constexpr int TSize = std::tuple_size< arg_tuple_type >::value;
-
-		return invoke_impl<result_type, Func, arg_tuple_type, 0 == TSize, TSize>::call(func, std::make_tuple( std::forward<A>(args)... ) );
+		return invoke_impl<result_type, Func, arg_tuple_type, 0 == TSize, TSize>::call(this->func, std::move(arg_tuple) );
 	}
 };
 
+template<class... Invokers>
+struct chain_invoke;
+
 template<class FirstInvocation,
-         class SecondInvocation,
-         bool SecondHasParam = true>
-struct chain_invoke
+         class SecondInvocation>
+struct chain_invoke< FirstInvocation, SecondInvocation >
 {
 	typedef typename SecondInvocation::result_type result_type;
 
@@ -169,34 +189,80 @@ struct chain_invoke
 
 	result_type invoke()
 	{
-		inv2.invoke( inv1.invoke() );
+		return do_invoke( typename HasArg< typename SecondInvocation::func_type >::type{} );
+	}
+
+	template<class... Args>
+	result_type invoke( Args&&... args )
+	{
+		return do_invoke( typename HasArg< typename SecondInvocation::func_type >::type{},
+		                  std::forward<Args>(args)... );
+	}
+
+private:
+	template<class... Args>
+	result_type do_invoke( std::true_type, Args&&... args )
+	{
+		return inv2.invoke( inv1.invoke( std::forward<Args>(args)... ) );
+	}
+
+	template<class... Args>
+	result_type do_invoke( std::false_type, Args&&... args )
+	{
+		inv1.invoke( std::forward<Args>(args)... );
+		return inv2.invoke();
+	}
+};
+
+template<class First, class Second, class Third, class... Invokers>
+struct chain_invoke<First, Second, Third, Invokers...>
+	: chain_invoke<Second, Third, Invokers...>
+{
+	typedef chain_invoke<Second, Third, Invokers...> base_type;
+
+	typedef typename base_type::result_type result_type;
+
+	First inv1;
+
+	chain_invoke(First i1, Second i2, Third i3, Invokers... invks)
+		: base_type( i2, i3, invks... )
+		, inv1( i1 )
+	{}
+
+	template<class... Args>
+	result_type invoke(Args&&... args)
+	{
+		return do_invoke( typename HasArg< typename Second::func_type >::type{},
+		                  std::forward<Args>(args)... );
+	}
+
+private:
+	template<class... Args>
+	result_type do_invoke( std::true_type, Args&&... args )
+	{
+		return base_type::invoke( inv1.invoke( std::forward<Args>(args)... ) );
+	}
+
+	template<class... Args>
+	result_type do_invoke( std::false_type, Args&&... args )
+	{
+		inv1.invoke( std::forward<Args>(args)... );
+		return base_type::invoke();
 	}
 };
 
 template<class Exec, class Func>
-struct PostInvoker
+struct PostTask
 	: public TaskImpl
 {
 	typedef Exec executor_type;
+	typedef Func function_type;
 
 	invocation<Func> func;
 	Exec *executor;
 	std::shared_ptr<TaskImpl> next;
 
-	// template<class Func>
-	// PostInvoker(Func&& func)
-	// 	: func( make_callable( std::forward<Func>(func) ) )
-	// 	, executor(nullptr)
-	// {}
-
-	// template<class Func>
-	// PostInvoker(Exec *ex, Func&& func, std::shared_ptr<TaskImpl> next = nullptr)
-	// 	: func( make_callable( std::forward<Func>(func) ) )
-	// 	, executor(ex)
-	// 	, next(next)
-	// {}
-
-	PostInvoker(Exec *ex, Func func, std::shared_ptr<TaskImpl> next = nullptr)
+	PostTask(Exec *ex, Func func, std::shared_ptr<TaskImpl> next = nullptr)
 		: func( std::move(func) )
 		, executor(ex)
 		, next(next)

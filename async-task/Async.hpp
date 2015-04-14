@@ -59,19 +59,21 @@ async(Func&& func, Args&&... args)
 template<class Func>
 void post(ThreadExecutor& ex, Func&& func)
 {
-	ex.Schedule( PostInvoker<ThreadExecutor,Func>( &ex, std::forward<Func>(func) ) );
+	ex.Schedule( PostTask<ThreadExecutor,Func>( &ex, std::forward<Func>(func) ) );
 }
 
-template<class Func, class Func2>
-void post(ThreadExecutor& ex, Func&& func, Func2&& func2)
+template<class Func, class... ThenFuncs>
+void post(ThreadExecutor& ex, Func&& func, ThenFuncs&&... funcs)
 {
-	// invocation<Func> inv1( std::forward<Func>(func) );
-	// invocation<Func2> inv2( std::forward<Func2>(func2) );
-	// chain_invoke< decltype(inv1), decltype(inv2) > chain_inv;
+	invocation<Func> inv1( std::forward<Func>(func) );
 
-	// post( ex, [chain_inv]() {
-	// 		chain_inv.invoke();
-	// } );
+	using inv1_result_type = typename invocation<Func>::result_type;
+
+	chain_invoke< decltype(inv1), invocation<ThenFuncs>... > chain_inv( inv1, invocation<ThenFuncs>( std::forward<ThenFuncs>(funcs) )... );
+
+	post( ex, [=]() mutable {
+			chain_inv.invoke();
+	} );
 
 	//ex.Schedule( PostInvoker<ThreadExecutor,Func>( &ex, std::forward<Func>(func) ) );
 }
