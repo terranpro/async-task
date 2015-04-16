@@ -97,30 +97,6 @@ struct invoke_impl<Ret, F, Tuple, true, Total, N...>
 	}
 };
 
-
-template<class Signature>
-struct func_sig;
-
-template<class Ret, class... Args>
-struct func_sig<Ret(Args...)>
-{
-	typedef std::tuple<Args...> arg_tuple_type;
-	typedef Ret return_type;
-};
-
-template<class Func, class...Args>
-struct invocation_result_helper
-{
-	typedef decltype( std::declval<Func>()( std::declval<Args>()... ) ) result_type;
-};
-
-template<class Func, class... Args>
-struct invocation_result_helper<Func, std::tuple<Args...>>
-{
-	typedef decltype( std::declval<Func>()( std::declval<Args>()... ) ) result_type;
-};
-
-
 template<class Func>
 struct invocation
 {
@@ -260,12 +236,10 @@ struct PostTask
 
 	invocation<Func> func;
 	Exec *executor;
-	std::shared_ptr<TaskImpl> next;
 
-	PostTask(Exec *ex, Func func, std::shared_ptr<TaskImpl> next = nullptr)
+	PostTask(Exec *ex, Func func)
 		: func( std::move(func) )
 		, executor(ex)
-		, next(next)
 	{}
 
 	virtual TaskStatus Invoke()
