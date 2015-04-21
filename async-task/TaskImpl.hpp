@@ -73,7 +73,6 @@ public:
 	virtual void Cancel()
 	{
 	}
-
 };
 
 // template<class Exec = void, class... >
@@ -229,7 +228,7 @@ private:
 
 template<class Exec, class Func>
 struct PostTask
-	: public TaskImpl
+//	: public TaskImpl
 {
 	typedef Exec executor_type;
 	typedef Func function_type;
@@ -242,16 +241,16 @@ struct PostTask
 		, executor(ex)
 	{}
 
-	virtual TaskStatus Invoke()
+	TaskStatus Invoke()
 	{
 		func.invoke();
 
 		return TaskStatus::Finished;
 	}
 
-	virtual void Yield()
+	void Yield()
 	{}
-	virtual void Cancel()
+	void Cancel()
 	{}
 };
 

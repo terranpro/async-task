@@ -623,17 +623,17 @@ void post_test()
 	for( int i = 0; i < chains; ++i )
 		as::post( ex, [&]() { post_chain(ex, 0); } );
 
-	as::post( ex, []() { return foo(99); },
-	          [](foo i) { std::cout << i << " \n"; } );
+	// as::post( ex, []() { return foo(99); },
+	//           [](foo i) { std::cout << i << " \n"; } );
 
-	as::post( ex, []() { return 99; },
-	          []() { std::cout << "finished\n"; },
-	          []() { std::cout << "amazing!\n"; }
-	          , []() { std::cout << "amazing!\n"; }
-	          , []() { std::cout << "amazing!\n"; }
-	          , []() { std::cout << "amazing!\n"; }
-	          , []() { std::cout << "amazing!\n"; }
-	        );
+	// as::post( ex, []() { return 99; },
+	//           []() { std::cout << "finished\n"; },
+	//           []() { std::cout << "amazing!\n"; }
+	//           , []() { std::cout << "amazing!\n"; }
+	//           , []() { std::cout << "amazing!\n"; }
+	//           , []() { std::cout << "amazing!\n"; }
+	//           , []() { std::cout << "amazing!\n"; }
+	//         );
 
 	clock::time_point start = clock::now();
 	{
@@ -702,7 +702,7 @@ int main(int argc, char *argv[])
 
 	// sync_test();
 
-	function_context_switch_test();
+	// function_context_switch_test();
 
 	post_test();
 

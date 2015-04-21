@@ -56,14 +56,14 @@ async(Func&& func, Args&&... args)
 	              std::forward<Args>(args)... );
 }
 
-template<class Func>
-void post(ThreadExecutor& ex, Func&& func)
+template<class Ex, class Func>
+void post(Ex& ex, Func&& func)
 {
-	ex.Schedule( PostTask<ThreadExecutor,Func>( &ex, std::forward<Func>(func) ) );
+	ex.Schedule( Task{ true, PostTask<Ex,Func>( &ex, std::forward<Func>(func) ) } );
 }
 
-template<class Func, class... ThenFuncs>
-void post(ThreadExecutor& ex, Func&& func, ThenFuncs&&... funcs)
+template<class Ex, class Func, class... ThenFuncs>
+void post(Ex& ex, Func&& func, ThenFuncs&&... funcs)
 {
 	invocation<Func> inv1( std::forward<Func>(func) );
 
@@ -74,8 +74,6 @@ void post(ThreadExecutor& ex, Func&& func, ThenFuncs&&... funcs)
 	post( ex, [=]() mutable {
 			chain_inv.invoke();
 	} );
-
-	//ex.Schedule( PostInvoker<ThreadExecutor,Func>( &ex, std::forward<Func>(func) ) );
 }
 
 } // namespace as

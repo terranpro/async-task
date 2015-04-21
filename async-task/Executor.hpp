@@ -36,8 +36,6 @@ public:
 
 	static Executor& GetDefault();
 
-	//virtual void AddWork(std::unique_ptr<Invoker> invoker) {}
-
 	const std::type_info& Type() const;
   template <class ExecutorType> ExecutorType* Target();
   template <class ExecutorType> const ExecutorType* Target() const;
