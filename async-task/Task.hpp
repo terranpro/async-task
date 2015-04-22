@@ -30,7 +30,10 @@ struct TaskStorage
 {
 	static constexpr int ss_size = 12;
 
-	static constexpr int storage_size = sizeof(char[ss_size]) < sizeof(void *) ? sizeof(void *) : sizeof(char[ss_size]);
+	static constexpr int storage_size =
+		( sizeof(char[ss_size]) < sizeof(void *) )
+		? sizeof(void *)
+		: sizeof(char[ss_size]);
 
 	typedef std::aligned_storage<sizeof(char[storage_size]), alignof(char[storage_size])>::type storage_type;
 
