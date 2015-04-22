@@ -577,7 +577,6 @@ void post_chain(as::ThreadExecutor& ex, unsigned int i)
 {
 	if (i < iterations)
 		as::post( ex, [&ex, i]{ post_chain( ex, i + 1 ); } );
-		//as::post( ex, std::bind(post_chain, std::ref(ex), i + 1 ) );
 }
 
 as::TaskResult<void>
@@ -702,7 +701,7 @@ int main(int argc, char *argv[])
 
 	// sync_test();
 
-	// function_context_switch_test();
+	function_context_switch_test();
 
 	post_test();
 

@@ -39,7 +39,17 @@ public:
 	const std::type_info& Type() const;
   template <class ExecutorType> ExecutorType* Target();
   template <class ExecutorType> const ExecutorType* Target() const;
+
+	template<class Handler>
+	void schedule(Handler&& handler);
 };
+
+template<class Handler>
+void Executor::schedule(Handler&& handler)
+{
+	this->Schedule( Task{ true, std::forward<Handler>(handler) } );
+}
+
 
 } // namespace as
 

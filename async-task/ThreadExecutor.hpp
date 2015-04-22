@@ -25,10 +25,6 @@
 #include <deque>
 #include <type_traits>
 
-#include <iostream>
-
-#include <boost/pool/pool_alloc.hpp>
-
 #include <cassert>
 
 namespace as {
@@ -246,33 +242,10 @@ public:
 		assert( task_queue.Empty() );
 	}
 
-	void Schedule(Task task)
-	{
-		auto tw = new ThreadWorkImpl<Task>{ std::move(task) };
-
-		std::lock_guard<std::mutex> lock{ task_mut };
-		//task_queue.push_back( std::move(info) );
-		task_queue.Push( tw );
-
-		if ( task_queue.Front() == tw )
-			cond.notify_one();
-	}
-
 	template<class Handler>
 	void Schedule(Handler&& ti)
 	{
-		auto tw = new ThreadWorkImpl<Handler>{ std::move(ti) };
-
-		//using Pool = boost::singleton_pool<MyPoolTag, sizeof( ThreadWorkImpl<Handler> ) >;
-		//void *ptr = static_cast<ThreadWork *>( Pool::malloc() );
-
-		// struct MyPoolTag
-		// {};
-		// using Pool = boost::fast_pool_allocator< ThreadWorkImpl<Handler> >;
-		// void *ptr = static_cast<ThreadWork *>( Pool::allocate() );
-		// auto tw = new(ptr) ThreadWorkImpl<Handler>{ std::move(ti) };
-
-		assert( tw );
+		auto tw = new ThreadWorkImpl<Handler>{ std::forward<Handler>(ti) };
 
 		if ( auto ctx = Registry<ThreadExecutorImpl, Context>::Current(this) ) {
 			ctx->priv_task_queue.Push( tw );
@@ -280,14 +253,13 @@ public:
 		}
 
 		std::lock_guard<std::mutex> lock{ task_mut };
-		//task_queue.push_back( std::move(info) );
 		task_queue.Push( tw );
 
-		// if ( thr.joinable() == false || IsCurrent() )
-		// 	return;
+		if ( IsCurrent() )
+			return;
 
-		// if ( task_queue.Front() == tw )
-		// 	cond.notify_one();
+		if ( task_queue.Front() == tw )
+			cond.notify_one();
 	}
 
 	void ScheduleAfter(Task task, std::chrono::milliseconds time_ms)
@@ -301,7 +273,7 @@ public:
 
 	bool IsCurrent() const
 	{
-		return thr.get_id() == std::this_thread::get_id();
+		return Registry<ThreadExecutorImpl, Context>::Current(this) != nullptr;
 	}
 
 	void Run()
@@ -315,7 +287,10 @@ public:
 			assert( lock.owns_lock() );
 
 			lock.unlock();
+
 			DoIteration( &ctx );
+
+			// DoProcessTasks( &ctx, lock );
 		}
 	}
 
@@ -359,15 +334,6 @@ private:
 
 			if ( !fin )
 				jobs.Push( tip.release() );
-
-			// auto tip = jobs.Pop();
-
-			// --job_count;
-
-			// auto fin = DoProcessTask( tip );
-			// if ( !fin )
-			// 	jobs.Push( tip );
-
 		}
 
 		return true;
@@ -385,9 +351,9 @@ private:
 		return lock;
 	}
 
-	void DoProcessTasks( std::unique_lock<std::mutex> lock )
+	void DoProcessTasks( Context *ctx, std::unique_lock<std::mutex>& lock )
 	{
-		IntrusiveJobQueue<ThreadWork> jobs = std::move(task_queue);
+		IntrusiveJobQueue<ThreadWork> jobs = std::move(ctx->priv_task_queue);
 
 		lock.unlock();
 
@@ -399,18 +365,8 @@ private:
 			auto fin = DoProcessTask( tip.get() );
 
 			if ( !fin ) {
-				lock.lock();
-				task_queue.Push( tip.release() );
-				lock.unlock();
+				ctx->priv_task_queue.Push( tip.release() );
 			}
-
-			// auto tip = jobs.Pop();
-			// auto fin = DoProcessTask( tip );
-			// if ( !fin ) {
-			// 	lock.lock();
-			// 	task_queue.Push( tip );
-			// 	lock.unlock();
-			// }
 
 			--job_count;
 		}
@@ -448,12 +404,6 @@ public:
 		impl->Schedule(std::move(task));
 	}
 
-	template<class Handler>
-	void Schedule(Handler&& ti)
-	{
-		impl->Schedule(std::move(ti));
-	}
-
 	void ScheduleAfter(Task task, std::chrono::milliseconds time_ms)
 	{
 		impl->ScheduleAfter(std::move(task), time_ms);
@@ -477,6 +427,13 @@ public:
 	void Shutdown()
 	{
 		return impl->Shutdown();
+	}
+
+public:
+	template<class Handler>
+	void schedule(Handler&& ti)
+	{
+		impl->Schedule(std::forward<Handler>(ti));
 	}
 };
 

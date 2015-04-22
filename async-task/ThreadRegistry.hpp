@@ -9,14 +9,14 @@ namespace as {
 template<class Executor, class Context>
 struct Registry
 {
-	static __thread std::map< Executor *, Context * > *registry;
+	static __thread std::map< Executor const *, Context * > *registry;
 	Executor *ex;
 
 	Registry(Executor *ex, Context *ctxt)
 		: ex(ex)
 	{
 		if ( !registry )
-			registry = new std::map< Executor *, Context * >();
+			registry = new std::map< Executor const *, Context * >();
 
 		this->registry->insert( std::make_pair(ex, ctxt) );
 	}
@@ -26,7 +26,7 @@ struct Registry
 		registry->erase( ex );
 	}
 
-	static Context *Current(Executor *ex)
+	static Context *Current(Executor const *ex)
 	{
 		if ( !registry )
 			return nullptr;
@@ -41,7 +41,7 @@ struct Registry
 
 template<class Executor, class Context>
 //thread_local std::map< Executor *, Context * > Registry<Executor, Context>::registry{};
-__thread std::map< Executor *, Context * > *Registry<Executor, Context>::registry;
+__thread std::map< Executor const *, Context * > *Registry<Executor, Context>::registry;
 
 } // namespace as
 

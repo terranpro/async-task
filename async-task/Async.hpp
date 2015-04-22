@@ -23,13 +23,13 @@
 namespace as {
 
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext
-template<class Func, class... Args>
+template<class Ex, class Func, class... Args>
 TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
-async(ThreadExecutor& context, Func&& func, Args&&... args)
+async(Ex& context, Func&& func, Args&&... args)
 {
 	using Ret = decltype( std::declval<Func>()(std::declval<Args>()...) );
 
-	context.Schedule( TaskImplBase<BaseInvoker<Ret> > (
+	context.schedule( TaskImplBase<BaseInvoker<Ret> > (
 		                  std::forward<Func>(func),
 		                  std::forward<Args>(args)... ) );
 
@@ -59,7 +59,7 @@ async(Func&& func, Args&&... args)
 template<class Ex, class Func>
 void post(Ex& ex, Func&& func)
 {
-	ex.Schedule( Task{ true, PostTask<Ex,Func>( &ex, std::forward<Func>(func) ) } );
+	ex.schedule( PostTask<Ex,Func>( &ex, std::forward<Func>(func) ) );
 }
 
 template<class Ex, class Func, class... ThenFuncs>
