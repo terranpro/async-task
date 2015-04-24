@@ -145,19 +145,19 @@ struct full_invocation
 };
 
 template<class... Invokers>
-struct chain_invoke;
+struct chain_invocation;
 
 template<class FirstInvocation,
          class SecondInvocation>
-struct chain_invoke< FirstInvocation, SecondInvocation >
+struct chain_invocation< FirstInvocation, SecondInvocation >
 {
 	typedef typename SecondInvocation::result_type result_type;
 
 	FirstInvocation inv1;
 	SecondInvocation inv2;
 
-	chain_invoke(FirstInvocation i1,
-	             SecondInvocation i2)
+	chain_invocation(FirstInvocation i1,
+	                 SecondInvocation i2)
 		: inv1( i1 )
 		, inv2( i2 )
 	{}
@@ -190,16 +190,16 @@ private:
 };
 
 template<class First, class Second, class Third, class... Invokers>
-struct chain_invoke<First, Second, Third, Invokers...>
-	: chain_invoke<Second, Third, Invokers...>
+struct chain_invocation<First, Second, Third, Invokers...>
+	: chain_invocation<Second, Third, Invokers...>
 {
-	typedef chain_invoke<Second, Third, Invokers...> base_type;
+	typedef chain_invocation<Second, Third, Invokers...> base_type;
 
 	typedef typename base_type::result_type result_type;
 
 	First inv1;
 
-	chain_invoke(First i1, Second i2, Third i3, Invokers... invks)
+	chain_invocation(First i1, Second i2, Third i3, Invokers... invks)
 		: base_type( i2, i3, invks... )
 		, inv1( i1 )
 	{}
@@ -252,6 +252,22 @@ struct PostTask
 	{}
 	void Cancel()
 	{}
+};
+
+template<class Exec, class Func>
+struct AsyncTask
+{
+	typedef Exec executor_type;
+	typedef Func function_type;
+
+	invocation<Func> func;
+	Exec *executor;
+
+	AsyncTask(Exec *ex, Func func)
+		: func( std::move(func) )
+		, executor(ex)
+	{}
+
 };
 
 } // namespace as

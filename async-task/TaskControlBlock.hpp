@@ -55,7 +55,8 @@ struct InvokerStorage
 {
 	std::unique_ptr<Ret> res;
 
-	void operator()(std::function<Ret()>& func)
+	template<class Func>
+	void operator()(Func&& func)
 	{
 		res.reset( new Ret( func() ) );
 	}
@@ -70,7 +71,8 @@ template<>
 struct InvokerStorage<void>
 	: BaseInvokerStorage
 {
-	void operator()(std::function<void()>& func)
+	template<class Func>
+	void operator()(Func&& func)
 	{
 		func();
 
@@ -144,7 +146,8 @@ class AsyncResult
 	InvokerStorage<Ret> storage;
 
 public:
-	void operator()(std::function<Ret()>& func)
+	template<class Func>
+	void operator()(Func&& func)
 	{
 		storage( func );
 

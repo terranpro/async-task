@@ -134,6 +134,33 @@ struct FunctionSignature
 	                    FunctionSignatureHelper< T > >::type
 {};
 
+template<class C>
+struct IsCallableClassHelper
+{
+	typedef char (&yes)[2];
+	typedef char (& no)[1];
+
+	template<class T>
+	static yes check( typename ClassFunctionSignatureHelper<T>::type );
+
+	template<class>
+	static no check(...);
+
+	static constexpr bool value = sizeof( check<C>( 0 ) ) == sizeof(yes);
+};
+
+template<class Func>
+struct IsCallableFunctionHelper
+	: std::is_function< typename std::decay<Func>::type >
+{};
+
+template<class T>
+struct IsCallable
+	: std::conditional< std::is_class<T>::value,
+	                    IsCallableClassHelper<T>,
+	                    IsCallableFunctionHelper<T> >::type
+{};
+
 template<class T>
 struct HasArgHelper
 { typedef void type; };
@@ -146,6 +173,44 @@ template<class T>
 struct HasArg<T, typename HasArgHelper< typename FunctionSignature<T>::arg1_type >::type >
 	: std::true_type
 {};
+
+// Split a list of types into tuple of callables and a tuple of args
+template<class... Args>
+struct SplitByCallable;
+
+template<class Next, class... Args>
+struct SplitByCallable< Next, Args...>
+	: std::conditional< IsCallable<Next>::value,
+	                    SplitByCallable< std::tuple<Next>, Args... >,
+	                    SplitByCallable< std::tuple<>, std::tuple<Next, Args...> > >::type
+{};
+
+template<class... Callables, class Next, class... Args>
+struct SplitByCallable< std::tuple<Callables...>, Next, Args... >
+	: std::conditional< IsCallable<Next>::value,
+	                    SplitByCallable< std::tuple<Callables..., Next>, Args... >,
+	                    SplitByCallable< std::tuple<Callables...>, std::tuple< Next, Args... > >
+        >::type
+{};
+
+template<class... Callables>
+struct SplitByCallable< std::tuple<Callables...> >
+	: SplitByCallable< std::tuple<Callables...>, std::tuple<> >
+{};
+
+template<class... Callables, class... Args>
+struct SplitByCallable< std::tuple<Callables...>, std::tuple<Args...> >
+{
+	typedef std::tuple<Callables...> type;
+	typedef std::tuple<Args...> args;
+};
+
+template<>
+struct SplitByCallable<>
+{
+	typedef std::tuple<> type;
+	typedef std::tuple<> args;
+};
 
 } // namespace as
 

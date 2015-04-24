@@ -65,11 +65,14 @@ void post(Ex& ex, Func&& func)
 template<class Ex, class Func, class... ThenFuncs>
 void post(Ex& ex, Func&& func, ThenFuncs&&... funcs)
 {
-	invocation<Func> inv1( std::forward<Func>(func) );
+	using inv1_type = invocation<Func>;
 
-	using inv1_result_type = typename invocation<Func>::result_type;
+	using inv1_result_type = typename inv1_type::result_type;
 
-	chain_invoke< decltype(inv1), invocation<ThenFuncs>... > chain_inv( inv1, invocation<ThenFuncs>( std::forward<ThenFuncs>(funcs) )... );
+	using chain_type = chain_invocation< inv1_type, invocation<ThenFuncs>... >;
+
+	chain_type chain_inv( inv1_type( std::forward<Func>(func) ),
+	                      invs_type( std::forward<ThenFuncs>(funcs) )... );
 
 	post( ex, [=]() mutable {
 			chain_inv.invoke();
