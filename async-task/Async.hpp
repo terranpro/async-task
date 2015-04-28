@@ -72,7 +72,7 @@ void post(Ex& ex, Func&& func, ThenFuncs&&... funcs)
 	using chain_type = chain_invocation< inv1_type, invocation<ThenFuncs>... >;
 
 	chain_type chain_inv( inv1_type( std::forward<Func>(func) ),
-	                      invs_type( std::forward<ThenFuncs>(funcs) )... );
+	                      std::forward<ThenFuncs>(funcs)... );
 
 	post( ex, [=]() mutable {
 			chain_inv.invoke();
