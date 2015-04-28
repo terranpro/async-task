@@ -567,10 +567,10 @@ void sync_test()
 const unsigned int iterations = 1000000;
 //const unsigned int iterations = 100;
 
-void chain(as::ThreadExecutor& ex, unsigned int i)
+void chain(as::ThreadExecutor ex, unsigned int i)
 {
 	if (i < iterations)
-		as::async( ex, chain, std::ref(ex), i + 1);
+		as::async( ex, chain, ex, i + 1 );
 }
 
 void post_chain(as::ThreadExecutor& ex, unsigned int i)
@@ -580,10 +580,10 @@ void post_chain(as::ThreadExecutor& ex, unsigned int i)
 }
 
 as::TaskResult<void>
-channel_chain(as::ThreadExecutor& ex, unsigned int i)
+channel_chain(as::ThreadExecutor ex, unsigned int i)
 {
 	if (i < iterations)
-		as::async( ex, channel_chain, std::ref(ex), i + 1);
+		as::async( ex, channel_chain, ex, i + 1);
 
 	return as::cancel;
 }
@@ -622,8 +622,8 @@ void post_test()
 	for( int i = 0; i < chains; ++i )
 		as::post( ex, [&]() { post_chain(ex, 0); } );
 
-	// as::post( ex, []() { return foo(99); },
-	//           [](foo i) { std::cout << i << " \n"; } );
+	as::post( ex, []() { return foo(99); },
+	          [](foo i) { std::cout << i << " \n"; } );
 
 	as::post( ex, []() { return 99; },
 	          []() { std::cout << "finished\n"; },
@@ -701,7 +701,7 @@ int main(int argc, char *argv[])
 
 	// sync_test();
 
-	function_context_switch_test();
+	// function_context_switch_test();
 
 	post_test();
 

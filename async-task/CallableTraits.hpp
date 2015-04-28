@@ -151,7 +151,9 @@ struct IsCallableClassHelper
 
 template<class Func>
 struct IsCallableFunctionHelper
-	: std::is_function< typename std::decay<Func>::type >
+	: std::is_function<
+		typename std::remove_pointer< typename std::decay< Func >::type >::type
+        >
 {};
 
 template<class T>
@@ -203,6 +205,15 @@ struct SplitByCallable< std::tuple<Callables...>, std::tuple<Args...> >
 {
 	typedef std::tuple<Callables...> type;
 	typedef std::tuple<Args...> args;
+
+	//template<class Builder, class C1, class... Cs, class... A>
+	template<class Builder>
+	static typename Builder::result_type
+	build(Builder&& b, Callables... cs, Args... args)
+	{
+		return b( std::make_tuple( std::move(cs)... ),
+		          std::move(args)... );
+	}
 };
 
 template<>

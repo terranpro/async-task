@@ -226,6 +226,74 @@ private:
 	}
 };
 
+template<class First>
+struct chain_invocation<First>
+	: public First
+{};
+
+template <std::size_t... Is>
+struct indices {};
+
+template <std::size_t N, std::size_t... Is>
+struct build_indices
+	: build_indices<N-1, N-1, Is...> {};
+
+template <std::size_t... Is>
+struct build_indices<0, Is...> : indices<Is...>
+{
+	using type = indices<Is...>;
+};
+
+template<std::size_t Offset, std::size_t N, std::size_t... Is>
+struct build_indices_offset
+	: build_indices_offset< Offset, N-1, N-1, Is... >
+{};
+
+template<std::size_t Offset, std::size_t... Is>
+struct build_indices_offset<Offset, Offset, Is... >
+{
+	using type = indices< Is... >;
+};
+
+template<class Callables, class Args>
+struct invoker_builder;
+
+template<class FirstCallable, class... Callables, class... Args>
+struct invoker_builder< std::tuple<FirstCallable, Callables...>, std::tuple<Args...> >
+{
+	typedef full_invocation<FirstCallable, Args...> inv1_type;
+	typedef typename inv1_type::result_type inv1_result_type;
+	typedef chain_invocation< inv1_type, invocation<Callables>... >  chain_type;
+	typedef chain_type result_type;
+
+	template<class C1, class... A, std::size_t... Ids>
+	chain_type build_chain_impl(indices<Ids...>, std::tuple<C1> cs, A&&... args )
+	{
+		return chain_type( inv1_type( std::get<0>(cs), std::forward<A>(args)... ) );
+	}
+
+	template<class C1, class... C, class... A, std::size_t... Ids>
+	chain_type build_chain_impl(indices<Ids...>, std::tuple<C1, C...> cs, A&&... args )
+	{
+		return chain_type( inv1_type( std::get<0>(cs), std::forward<A>(args)... ),
+		                   std::get<Ids>(cs)... );
+	}
+
+	template<class C1, class... C, class... A>
+	chain_type build_chain(std::tuple<C1, C...> cs, A&&... args)
+	{
+		return build_chain_impl( typename build_indices_offset<1, std::tuple_size<decltype(cs)>::value >::type(),
+		                         cs,
+		                         std::forward<A>(args)... );
+	}
+
+	template<class C1, class... C, class... A>
+	chain_type operator()( std::tuple<C1, C...> cs, A&&... args )
+	{
+		return build_chain( cs, std::forward<A>(args)... );
+	}
+};
+
 template<class Exec, class Func>
 struct PostTask
 {
