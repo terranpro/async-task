@@ -28,7 +28,7 @@ namespace as {
 
 struct TaskStorage
 {
-	static constexpr int ss_size = 12;
+	static constexpr int ss_size = 32;
 
 	static constexpr int storage_size =
 		( sizeof(char[ss_size]) < sizeof(void *) )
@@ -64,7 +64,7 @@ struct TaskStorage
 
 class TaskBase
 {
-public:
+protected:
 
 	enum operation_t {
 		clone_t,
@@ -174,50 +174,58 @@ public:
 			delete storage->get<Functor *>();
 		}
 	};
-};
 
-class Task
-{
-private:
 	typedef void (*TaskManager)(TaskStorage *dest, const TaskStorage *src, TaskBase::operation_t);
 
 	TaskStorage storage;
 	TaskManager manager;
 
-public:
-	Task()
+	TaskBase()
 		: storage()
 		, manager(nullptr)
 	{}
 
 	template<class Impl>
-	Task(bool, Impl&& impl)
-		: manager( TaskBase::Manager<Impl>::manage )
+	TaskBase(bool, Impl&& impl)
+		: manager( Manager<Impl>::manage )
 	{
 		//static_assert( sizeof(Impl) <= sizeof(storage), "Functor size too large" );
 
-		TaskBase::Manager<Impl>::create( &storage, std::forward<Impl>(impl) );
+		Manager<Impl>::create( &storage, std::forward<Impl>(impl) );
 	}
 
-	~Task()
+	~TaskBase()
 	{
 		if ( manager )
-			manager( &storage, nullptr, TaskBase::destroy_t );
+			manager( &storage, nullptr, destroy_t );
 	}
 
-	Task(Task const&) = delete;
-
-	Task(Task&& other)
+	TaskBase(TaskBase&& other)
 	{
 		if ( other.manager ) {
-			other.manager( &storage, &other.storage, TaskBase::move_t );
-			other.manager( &other.storage, nullptr, TaskBase::destroy_t );
+			other.manager( &storage, &other.storage, move_t );
+			other.manager( &other.storage, nullptr, destroy_t );
 
 			manager = other.manager;
 
 			other.manager = nullptr;
 		}
 	}
+};
+
+class Task
+	: public TaskBase
+{
+public:
+	Task() = default;
+
+	template<class Impl>
+	Task(bool, Impl&& impl)
+		: TaskBase(true, std::forward<Impl>(impl))
+	{}
+
+	Task(Task const&) = delete;
+	Task(Task&&) = default;
 
 	TaskStatus Invoke()
 	{
@@ -225,7 +233,6 @@ public:
 		manager( &storage, nullptr, TaskBase::invoke_t );
 
 		return TaskStatus::Finished;
-		// return impl->Invoke();
 	}
 
 	void Yield()

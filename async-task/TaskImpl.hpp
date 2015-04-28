@@ -228,7 +228,6 @@ private:
 
 template<class Exec, class Func>
 struct PostTask
-//	: public TaskImpl
 {
 	typedef Exec executor_type;
 	typedef Func function_type;
@@ -250,6 +249,7 @@ struct PostTask
 
 	void Yield()
 	{}
+
 	void Cancel()
 	{}
 };
