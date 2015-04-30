@@ -207,12 +207,12 @@ struct SplitByCallable< std::tuple<Callables...>, std::tuple<Args...> >
 	typedef std::tuple<Args...> args;
 
 	//template<class Builder, class C1, class... Cs, class... A>
-	template<class Builder>
+	template<class Builder, class... A>
 	static typename Builder::result_type
-	build(Builder&& b, Callables... cs, Args... args)
+	build(Builder&& b, Callables... cs, A&&... args)
 	{
 		return b( std::make_tuple( std::move(cs)... ),
-		          std::move(args)... );
+		          std::forward<A>(args)... );
 	}
 };
 

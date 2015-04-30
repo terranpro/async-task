@@ -52,19 +52,28 @@ void post(Ex& ex, Func&& func, ThenFuncs&&... funcs)
 
 	post( ex, [c]() mutable {
 			c.invoke();
-	} );
+		} );
 }
 
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext
 template<class Ex, class Func, class... Args>
 TaskFuture< void >
-async(Ex& context, Func&& func, Args&&... args)
+async(Ex& ex, Func&& func, Args&&... args)
 {
 	// using Ret = decltype( std::declval<Func>()(std::declval<Args>()...) );
 
-	// context.schedule( TaskImplBase<BaseInvoker<Ret> > (
+	// ex.schedule( TaskImplBase<BaseInvoker<Ret> > (
 	// 	                  std::forward<Func>(func),
 	// 	                  std::forward<Args>(args)... ) );
+
+	// using sc = SplitByCallable< Func, Args... >;
+	// using ib = invoker_builder< typename sc::type, typename sc::args >;
+
+	// auto c = sc::build( ib(), std::forward<Func>(func), std::forward<Args>(args)... );
+
+	// post( ex, [c]() mutable {
+	// 		c.invoke();
+	// } );
 
 	return {};
 }

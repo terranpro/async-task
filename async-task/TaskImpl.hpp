@@ -78,6 +78,32 @@ public:
 // template<class Exec = void, class... >
 // struct PostInvoker
 
+// Move the indices stuff soon
+template <std::size_t... Is>
+struct indices {};
+
+template <std::size_t N, std::size_t... Is>
+struct build_indices
+	: build_indices<N-1, N-1, Is...> {};
+
+template <std::size_t... Is>
+struct build_indices<0, Is...> : indices<Is...>
+{
+	using type = indices<Is...>;
+};
+
+template<std::size_t Offset, std::size_t N, std::size_t... Is>
+struct build_indices_offset
+	: build_indices_offset< Offset, N-1, N-1, Is... >
+{};
+
+template<std::size_t Offset, std::size_t... Is>
+struct build_indices_offset<Offset, Offset, Is... >
+{
+	using type = indices< Is... >;
+};
+
+
 template <typename Ret, typename F, typename Tuple, bool Done, int Total, int... N>
 struct invoke_impl
 {
@@ -96,18 +122,33 @@ struct invoke_impl<Ret, F, Tuple, true, Total, N...>
 	}
 };
 
+template <class Func>
+struct convert_functor
+{
+	// helper to decay a reference function to pointer to function
+	typedef typename std::conditional<
+		std::is_same<Func, typename std::decay<Func>::type>::value,
+		std::decay<Func>,
+		convert_functor<typename std::decay<Func>::type>
+	                                 >::type::type type;
+};
+
 template<class Func>
 struct invocation
 {
-	typedef Func func_type;
+	typedef typename convert_functor<Func>::type func_type;
 	typedef FunctionSignature<Func> signature_type;
 	typedef typename FunctionSignature<Func>::return_type result_type;
 
-	Func func;
+	func_type func;
 
-	invocation(Func func)
-		: func( std::move(func) )
+	template<class F>
+	explicit invocation(F f)
+		: func( f )
 	{}
+
+	invocation(invocation const&) = default;
+	invocation(invocation&&) = default;
 
 	template<class... A>
 	result_type invoke(A&&... args)
@@ -116,7 +157,13 @@ struct invocation
 		constexpr int TSize = sizeof...( args );
 		typedef std::tuple<A...> arg_tuple_type;
 
-		return invoke_impl<result_type, Func, arg_tuple_type, 0 == TSize, TSize>::call(func, std::make_tuple( std::forward<A>(args)... ) );
+		return func( std::forward<A>(args)... );
+	}
+
+	template<class ArgTuple, size_t... Ids>
+	result_type invoke_impl(ArgTuple&& arg_tuple, indices<Ids...>)
+	{
+		return func( std::get<Ids>( std::forward<ArgTuple>(arg_tuple) )... );
 	}
 };
 
@@ -124,23 +171,25 @@ template<class Func, class... Args>
 struct full_invocation
 	: public invocation<Func>
 {
-	typedef std::tuple<Args...> arg_tuple_type;
+	typedef std::tuple< Args...> arg_tuple_type;
 
 	typedef decltype( std::declval<Func>()( std::declval<Args>()... ) ) result_type;
 
+private:
 	arg_tuple_type arg_tuple;
 
-	template<class... A>
-	full_invocation(Func func, A&&... args)
-		: invocation<Func>( std::move(func) )
-		, arg_tuple( std::make_tuple<Args...>( std::forward<A>(args)... ) )
+public:
+	template<class F, class... A>
+	explicit full_invocation(F f, A&&... args)
+		: invocation<Func>( f )
+		, arg_tuple( std::forward<A>(args)... )
 	{}
 
 	result_type invoke()
 	{
 		constexpr int TSize = std::tuple_size< arg_tuple_type >::value;
 
-		return invoke_impl<result_type, Func, arg_tuple_type, 0 == TSize, TSize>::call(this->func, std::move(arg_tuple) );
+		return this->invoke_impl( arg_tuple, typename build_indices<TSize>::type{} );
 	}
 };
 
@@ -229,30 +278,10 @@ private:
 template<class First>
 struct chain_invocation<First>
 	: public First
-{};
-
-template <std::size_t... Is>
-struct indices {};
-
-template <std::size_t N, std::size_t... Is>
-struct build_indices
-	: build_indices<N-1, N-1, Is...> {};
-
-template <std::size_t... Is>
-struct build_indices<0, Is...> : indices<Is...>
 {
-	using type = indices<Is...>;
-};
-
-template<std::size_t Offset, std::size_t N, std::size_t... Is>
-struct build_indices_offset
-	: build_indices_offset< Offset, N-1, N-1, Is... >
-{};
-
-template<std::size_t Offset, std::size_t... Is>
-struct build_indices_offset<Offset, Offset, Is... >
-{
-	using type = indices< Is... >;
+	chain_invocation(First i1)
+		: First(std::move(i1))
+	{}
 };
 
 template<class Callables, class Args>
@@ -266,17 +295,17 @@ struct invoker_builder< std::tuple<FirstCallable, Callables...>, std::tuple<Args
 	typedef chain_invocation< inv1_type, invocation<Callables>... >  chain_type;
 	typedef chain_type result_type;
 
-	template<class C1, class... A, std::size_t... Ids>
-	chain_type build_chain_impl(indices<Ids...>, std::tuple<C1> cs, A&&... args )
-	{
-		return chain_type( inv1_type( std::get<0>(cs), std::forward<A>(args)... ) );
-	}
+	// template<class C1, class... A, std::size_t... Ids>
+	// chain_type build_chain_impl(indices<Ids...>, std::tuple<C1> cs, A&&... args )
+	// {
+	// 	return chain_type( inv1_type( std::get<0>(cs), std::forward<A>(args)... ) );
+	// }
 
 	template<class C1, class... C, class... A, std::size_t... Ids>
 	chain_type build_chain_impl(indices<Ids...>, std::tuple<C1, C...> cs, A&&... args )
 	{
 		return chain_type( inv1_type( std::get<0>(cs), std::forward<A>(args)... ),
-		                   std::get<Ids>(cs)... );
+		                   invocation<Callables>( std::get<Ids>(cs) )... );
 	}
 
 	template<class C1, class... C, class... A>
