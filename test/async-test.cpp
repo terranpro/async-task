@@ -576,7 +576,7 @@ void chain(as::ThreadExecutor ex, unsigned int i)
 void post_chain(as::ThreadExecutor ex, unsigned int i)
 {
 	if (i < iterations)
-		as::post( ex, [&ex, i]{ post_chain( ex, i + 1 ); } );
+		as::post( ex, [ex, i]{ post_chain( ex, i + 1 ); } );
 }
 
 as::TaskResult<void>
