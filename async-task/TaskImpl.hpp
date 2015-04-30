@@ -103,25 +103,6 @@ struct build_indices_offset<Offset, Offset, Is... >
 	using type = indices< Is... >;
 };
 
-
-template <typename Ret, typename F, typename Tuple, bool Done, int Total, int... N>
-struct invoke_impl
-{
-	static Ret call(F f, Tuple && t)
-	{
-		return invoke_impl<Ret, F, Tuple, Total == 1 + sizeof...(N), Total, N..., sizeof...(N)>::call(f, std::forward<Tuple>(t));
-	}
-};
-
-template <typename Ret, typename F, typename Tuple, int Total, int... N>
-struct invoke_impl<Ret, F, Tuple, true, Total, N...>
-{
-	static Ret call(F f, Tuple && t)
-	{
-		return f(std::get<N>(std::forward<Tuple>(t))...);
-	}
-};
-
 template <class Func>
 struct convert_functor
 {
@@ -153,10 +134,6 @@ struct invocation
 	template<class... A>
 	result_type invoke(A&&... args)
 	{
-		//constexpr int TSize = std::tuple_size< arg_tuple_type >::value;
-		constexpr int TSize = sizeof...( args );
-		typedef std::tuple<A...> arg_tuple_type;
-
 		return func( std::forward<A>(args)... );
 	}
 

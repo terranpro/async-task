@@ -625,14 +625,14 @@ void post_test()
 	as::post( ex, []() { return foo(99); },
 	          [](foo i) { std::cout << i << " \n"; } );
 
-	// as::post( ex, []() { return 99; },
-	//           []() { std::cout << "finished\n"; },
-	//           []() { std::cout << "amazing!\n"; }
-	//           , []() { std::cout << "amazing!\n"; }
-	//           , []() { std::cout << "amazing!\n"; }
-	//           , []() { std::cout << "amazing!\n"; }
-	//           , []() { std::cout << "amazing!\n"; }
-	//         );
+	as::post( ex, []() { return 99; },
+	          [](int&& x) { std::cout << x << "finished\n"; },
+	          []() { std::cout << "amazing!\n"; }
+	          , []() { std::cout << "amazing!\n"; }
+	          , []() { std::cout << "amazing!\n"; }
+	          , []() { std::cout << "amazing!\n"; }
+	          , []() { std::cout << "amazing!\n"; }
+	        );
 
 	clock::time_point start = clock::now();
 	{
