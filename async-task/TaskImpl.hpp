@@ -172,61 +172,19 @@ public:
 template<class... Invokers>
 struct chain_invocation;
 
-template<class FirstInvocation,
-         class SecondInvocation>
-struct chain_invocation< FirstInvocation, SecondInvocation >
+template<class First, class Second, class... Invokers>
+struct chain_invocation<First, Second, Invokers...>
+	: chain_invocation<Second, Invokers...>
 {
-	typedef typename SecondInvocation::result_type result_type;
-
-	FirstInvocation inv1;
-	SecondInvocation inv2;
-
-	template<class F, class S>
-	chain_invocation(F&& i1, S&& i2)
-		: inv1( std::forward<F>(i1) )
-		, inv2( std::forward<S>(i2) )
-	{}
-
-	result_type invoke()
-	{
-		return do_invoke( typename HasArg< typename SecondInvocation::func_type >::type{} );
-	}
-
-	template<class... Args>
-	result_type invoke( Args&&... args )
-	{
-		return do_invoke( typename HasArg< typename SecondInvocation::func_type >::type{},
-		                  std::forward<Args>(args)... );
-	}
-
-private:
-	template<class... Args>
-	result_type do_invoke( std::true_type, Args&&... args )
-	{
-		return inv2.invoke( inv1.invoke( std::forward<Args>(args)... ) );
-	}
-
-	template<class... Args>
-	result_type do_invoke( std::false_type, Args&&... args )
-	{
-		inv1.invoke( std::forward<Args>(args)... );
-		return inv2.invoke();
-	}
-};
-
-template<class First, class Second, class Third, class... Invokers>
-struct chain_invocation<First, Second, Third, Invokers...>
-	: chain_invocation<Second, Third, Invokers...>
-{
-	typedef chain_invocation<Second, Third, Invokers...> base_type;
+	typedef chain_invocation<Second, Invokers...> base_type;
 
 	typedef typename base_type::result_type result_type;
 
 	First inv1;
 
-	template<class F, class S, class T, class... Is>
-	chain_invocation(F&& i1, S&& i2, T&& i3, Is&&... invks)
-		: base_type( std::forward<S>(i2), std::forward<T>(i3), std::forward<Is>(invks)... )
+	template<class F, class S, class... Is>
+	chain_invocation(F&& i1, S&& i2, Is&&... invks)
+		: base_type( std::forward<S>(i2), std::forward<Is>(invks)... )
 		, inv1( std::forward<F>(i1) )
 	{}
 
@@ -293,7 +251,7 @@ struct invoker_builder< std::tuple<FirstCallable, Callables...>, std::tuple<Args
 	template<class... Cs, class... A>
 	chain_type build_chain(inv1_type&& c1, Cs&&... cs)
 	{
-		return chain_type( std::move(c1), { std::forward<Cs>(cs) }... );
+		return chain_type( std::move(c1), invocation<Callables>{ std::forward<Cs>(cs) }... );
 	}
 
 	template<class F, class... A>
