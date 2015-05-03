@@ -187,47 +187,38 @@ struct HasArg<T, typename HasArgHelper< typename FunctionSignature<T>::arg1_type
 {};
 
 // Split a list of types into tuple of callables and a tuple of args
-template<class... Args>
-struct SplitByCallable;
+template< template<class> class Pred, class... Args>
+struct SplitBy;
 
-template<class Next, class... Args>
-struct SplitByCallable< Next, Args...>
-	: std::conditional< IsCallable<Next>::value,
-	                    SplitByCallable< std::tuple<Next>, Args... >,
-	                    SplitByCallable< std::tuple<>, std::tuple<Next, Args...> > >::type
+template< template<class> class Pred, class Next, class... Args>
+struct SplitBy< Pred, Next, Args...>
+	: std::conditional< Pred<Next>::value,
+	                    SplitBy< Pred, std::tuple<Next>, Args... >,
+	                    SplitBy< Pred, std::tuple<>, std::tuple<Next, Args...> > >::type
 {};
 
-template<class... Callables, class Next, class... Args>
-struct SplitByCallable< std::tuple<Callables...>, Next, Args... >
-	: std::conditional< IsCallable<Next>::value,
-	                    SplitByCallable< std::tuple<Callables..., Next>, Args... >,
-	                    SplitByCallable< std::tuple<Callables...>, std::tuple< Next, Args... > >
+template< template<class> class Pred, class... TrueTypes, class Next, class... Args>
+struct SplitBy< Pred, std::tuple<TrueTypes...>, Next, Args... >
+	: std::conditional< Pred<Next>::value,
+	                    SplitBy< Pred, std::tuple<TrueTypes..., Next>, Args... >,
+	                    SplitBy< Pred, std::tuple<TrueTypes...>, std::tuple< Next, Args... > >
         >::type
 {};
 
-template<class... Callables>
-struct SplitByCallable< std::tuple<Callables...> >
-	: SplitByCallable< std::tuple<Callables...>, std::tuple<> >
+template< template<class> class Pred, class... TrueTypes>
+struct SplitBy< Pred, std::tuple<TrueTypes...> >
+	: SplitBy< Pred, std::tuple<TrueTypes...>, std::tuple<> >
 {};
 
-template<class... Callables, class... Args>
-struct SplitByCallable< std::tuple<Callables...>, std::tuple<Args...> >
+template< template<class> class Pred, class... TrueTypes, class... FalseTypes>
+struct SplitBy< Pred, std::tuple<TrueTypes...>, std::tuple<FalseTypes...> >
 {
-	typedef std::tuple<Callables...> type;
-	typedef std::tuple<Args...> args;
-
-	//template<class Builder, class C1, class... Cs, class... A>
-	template<class Builder, class... A>
-	static typename Builder::result_type
-	build(Builder&& b, Callables... cs, A&&... args)
-	{
-		return b( std::make_tuple( std::move(cs)... ),
-		          std::forward<A>(args)... );
-	}
+	typedef std::tuple<TrueTypes...> true_types;
+	typedef std::tuple<FalseTypes...> false_types;
 };
 
-template<>
-struct SplitByCallable<>
+template< template<class> class Pred>
+struct SplitBy<Pred>
 {
 	typedef std::tuple<> type;
 	typedef std::tuple<> args;

@@ -224,8 +224,6 @@ struct chain_invocation<First, Second, Third, Invokers...>
 
 	First inv1;
 
-	//chain_invocation(First i1, Second i2, Third i3, Invokers... invks)
-
 	template<class F, class S, class T, class... Is>
 	chain_invocation(F&& i1, S&& i2, T&& i3, Is&&... invks)
 		: base_type( std::forward<S>(i2), std::forward<T>(i3), std::forward<Is>(invks)... )
@@ -292,12 +290,6 @@ struct invoker_builder< std::tuple<FirstCallable, Callables...>, std::tuple<Args
 	typedef chain_invocation< inv1_type, invocation<Callables>... >  chain_type;
 	typedef chain_type result_type;
 
-	// template<class C1, class... A, std::size_t... Ids>
-	// chain_type build_chain_impl(indices<Ids...>, std::tuple<C1> cs, A&&... args )
-	// {
-	// 	return chain_type( inv1_type( std::get<0>(cs), std::forward<A>(args)... ) );
-	// }
-
 	template<class C1, class... C, class... A, std::size_t... Ids>
 	chain_type build_chain_impl(indices<Ids...>, std::tuple<C1, C...> cs, A&&... args )
 	{
@@ -317,10 +309,13 @@ struct invoker_builder< std::tuple<FirstCallable, Callables...>, std::tuple<Args
 		                         std::forward<A>(args)... );
 	}
 
-	template<class C1, class... C, class... A>
-	chain_type operator()( std::tuple<C1, C...> cs, A&&... args )
+	template<class... A>
+	result_type build(FirstCallable c, Callables... cs, A&&... args)
 	{
-		return build_chain( cs, std::forward<A>(args)... );
+		static_assert( sizeof...(A) == sizeof...(Args), "Arg" );
+
+		return build_chain( std::make_tuple( std::move(c), std::move(cs)... ),
+		                    std::forward<A>(args)... );
 	}
 };
 
