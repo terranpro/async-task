@@ -214,7 +214,7 @@ template<class... Callables, class... Args>
 struct SplitByCallable< std::tuple<Callables...>, std::tuple<Args...> >
 {
 	typedef std::tuple<Callables...> type;
-	typedef std::tuple< typename std::decay<Args>::type...> args;
+	typedef std::tuple<Args...> args;
 
 	//template<class Builder, class C1, class... Cs, class... A>
 	template<class Builder, class... A>

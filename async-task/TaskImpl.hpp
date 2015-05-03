@@ -146,9 +146,10 @@ template<class Func, class... Args>
 struct full_invocation
 	: public invocation<Func>
 {
-	typedef std::tuple< Args...> arg_tuple_type;
+	typedef std::tuple< typename std::decay<Args>::type...> arg_tuple_type;
 
-	typedef decltype( std::declval<Func>()( std::declval<Args>()... ) ) result_type;
+	typedef decltype( std::declval<Func>()( std::declval< typename std::decay<Args>::type >()... ) )
+	result_type;
 
 private:
 	arg_tuple_type arg_tuple;
