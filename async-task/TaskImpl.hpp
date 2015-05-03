@@ -290,32 +290,18 @@ struct invoker_builder< std::tuple<FirstCallable, Callables...>, std::tuple<Args
 	typedef chain_invocation< inv1_type, invocation<Callables>... >  chain_type;
 	typedef chain_type result_type;
 
-	template<class C1, class... C, class... A, std::size_t... Ids>
-	chain_type build_chain_impl(indices<Ids...>, std::tuple<C1, C...> cs, A&&... args )
+	template<class... Cs, class... A>
+	chain_type build_chain(inv1_type&& c1, Cs&&... cs)
 	{
-		// std::cout << typeid(inv1_type).name() << "\n";
-		// std::cout << typeid( std::tuple<A...> ).name() << "\n";
-		// std::cout << typeid( std::tuple< invocation<Callables>... > ).name() << "\n";
-
-		return chain_type( inv1_type( std::get<0>(cs), std::forward<A>(args)... ),
-		                   invocation<Callables>( std::get<Ids>(cs) )... );
+		return chain_type( std::move(c1), { std::forward<Cs>(cs) }... );
 	}
 
-	template<class C1, class... C, class... A>
-	chain_type build_chain(std::tuple<C1, C...> cs, A&&... args)
+	template<class F, class... A>
+	result_type build(F&& c, Callables const&... cs, A&&... args)
 	{
-		return build_chain_impl( typename build_indices_offset<1, std::tuple_size<decltype(cs)>::value >::type(),
-		                         cs,
-		                         std::forward<A>(args)... );
-	}
+		static_assert( sizeof...(A) == sizeof...(Args), "Argument count mismatch" );
 
-	template<class... A>
-	result_type build(FirstCallable c, Callables... cs, A&&... args)
-	{
-		static_assert( sizeof...(A) == sizeof...(Args), "Arg" );
-
-		return build_chain( std::make_tuple( std::move(c), std::move(cs)... ),
-		                    std::forward<A>(args)... );
+		return build_chain( inv1_type( std::forward<F>(c), std::forward<A>(args)... ), cs... );
 	}
 };
 
