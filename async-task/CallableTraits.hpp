@@ -122,8 +122,18 @@ struct FunctionSignatureHelper<R(C::*)(Args...) const &&>
 	: public FunctionSignatureBase<R(Args...)>
 {};
 
-template<class T>
+template<class T, T>
+struct ClassCallableEnabler
+{
+	typedef void enable_type;
+};
+
+template<class T, class Enable = void>
 struct ClassFunctionSignatureHelper
+{};
+
+template<class T>
+struct ClassFunctionSignatureHelper<T, typename ClassCallableEnabler<decltype(&T::operator()), &T::operator()>::enable_type >
 	: FunctionSignatureHelper< decltype( &T::operator() ) >
 {};
 
@@ -204,7 +214,7 @@ template<class... Callables, class... Args>
 struct SplitByCallable< std::tuple<Callables...>, std::tuple<Args...> >
 {
 	typedef std::tuple<Callables...> type;
-	typedef std::tuple<Args...> args;
+	typedef std::tuple< typename std::decay<Args>::type...> args;
 
 	//template<class Builder, class C1, class... Cs, class... A>
 	template<class Builder, class... A>

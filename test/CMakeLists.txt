@@ -14,5 +14,4 @@ SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_DEBUG_CXX_FLAGS} -O2 -rdynamic -gdwarf-2")
 TARGET_LINK_LIBRARIES( async-test
   #  ${pkg-glib_LIBRARIES}
   -pthread
-  boost_system
   )

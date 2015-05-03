@@ -18,8 +18,6 @@
 #include <functional>
 #include <tuple>
 
-#include <boost/pool/pool_alloc.hpp>
-
 namespace as {
 
 class TaskImpl
@@ -124,8 +122,8 @@ struct invocation
 	func_type func;
 
 	template<class F>
-	explicit invocation(F f)
-		: func( f )
+	explicit invocation(F&& f)
+		: func( std::forward<F>(f) )
 	{}
 
 	invocation(invocation const&) = default;
@@ -157,8 +155,8 @@ private:
 
 public:
 	template<class F, class... A>
-	explicit full_invocation(F f, A&&... args)
-		: invocation<Func>( f )
+	explicit full_invocation(F&& f, A&&... args)
+		: invocation<Func>( std::forward<F>(f) )
 		, arg_tuple( std::forward<A>(args)... )
 	{}
 
@@ -182,10 +180,10 @@ struct chain_invocation< FirstInvocation, SecondInvocation >
 	FirstInvocation inv1;
 	SecondInvocation inv2;
 
-	chain_invocation(FirstInvocation i1,
-	                 SecondInvocation i2)
-		: inv1( i1 )
-		, inv2( i2 )
+	template<class F, class S>
+	chain_invocation(F&& i1, S&& i2)
+		: inv1( std::forward<F>(i1) )
+		, inv2( std::forward<S>(i2) )
 	{}
 
 	result_type invoke()
@@ -225,9 +223,12 @@ struct chain_invocation<First, Second, Third, Invokers...>
 
 	First inv1;
 
-	chain_invocation(First i1, Second i2, Third i3, Invokers... invks)
-		: base_type( i2, i3, invks... )
-		, inv1( i1 )
+	//chain_invocation(First i1, Second i2, Third i3, Invokers... invks)
+
+	template<class F, class S, class T, class... Is>
+	chain_invocation(F&& i1, S&& i2, T&& i3, Is&&... invks)
+		: base_type( std::forward<S>(i2), std::forward<T>(i3), std::forward<Is>(invks)... )
+		, inv1( std::forward<F>(i1) )
 	{}
 
 	template<class... Args>
@@ -252,13 +253,31 @@ private:
 	}
 };
 
+// TODO: this specialization is awkward and was difficult to get
+// right; it needs to be initialized with a fully ready
+// full_invocation or invocation
 template<class First>
 struct chain_invocation<First>
-	: public First
 {
-	chain_invocation(First i1)
-		: First(std::move(i1))
+	typedef typename First::result_type result_type;
+
+	First first;
+
+	explicit chain_invocation(First&& f)
+		: first(std::move(f))
 	{}
+
+	template<class... Args>
+	result_type invoke(Args&&... args)
+	{
+		return first.invoke( std::forward<Args>(args)... );
+	}
+
+	template<class... Args>
+	result_type operator()(Args&&... args)
+	{
+		return invoke( std::forward<Args>(args)... );
+	}
 };
 
 template<class Callables, class Args>
@@ -281,6 +300,10 @@ struct invoker_builder< std::tuple<FirstCallable, Callables...>, std::tuple<Args
 	template<class C1, class... C, class... A, std::size_t... Ids>
 	chain_type build_chain_impl(indices<Ids...>, std::tuple<C1, C...> cs, A&&... args )
 	{
+		// std::cout << typeid(inv1_type).name() << "\n";
+		// std::cout << typeid( std::tuple<A...> ).name() << "\n";
+		// std::cout << typeid( std::tuple< invocation<Callables>... > ).name() << "\n";
+
 		return chain_type( inv1_type( std::get<0>(cs), std::forward<A>(args)... ),
 		                   invocation<Callables>( std::get<Ids>(cs) )... );
 	}
@@ -309,8 +332,9 @@ struct PostTask
 	invocation<Func> func;
 	Exec *executor;
 
-	PostTask(Exec *ex, Func func)
-		: func( std::move(func) )
+	template<class F>
+	PostTask(Exec *ex, F&& f)
+		: func( std::forward<F>(f) )
 		, executor(ex)
 	{}
 

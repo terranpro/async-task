@@ -47,9 +47,13 @@ struct ThreadWorkImpl
 {
 	Func func;
 
-	ThreadWorkImpl(Func f)
-		: func( std::move(f) )
+	template<class F>
+	explicit ThreadWorkImpl(F&& f)
+		: func( std::forward<F>(f) )
 	{}
+
+	ThreadWorkImpl(ThreadWorkImpl const&) = delete;
+	ThreadWorkImpl(ThreadWorkImpl&&) = default;
 
 	virtual bool operator()()
 	{

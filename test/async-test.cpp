@@ -567,16 +567,16 @@ void sync_test()
 const unsigned int iterations = 1000000;
 //const unsigned int iterations = 100;
 
-void chain(as::ThreadExecutor ex, unsigned int i)
+void chain(as::ThreadExecutor& ex, unsigned int i)
 {
 	if (i < iterations)
-		as::async( ex, chain, ex, i + 1 );
+		as::async( ex, chain, std::ref(ex), i + 1 );
 }
 
 void post_chain(as::ThreadExecutor ex, unsigned int i)
 {
 	if (i < iterations)
-		as::post( ex, [ex, i]{ post_chain( ex, i + 1 ); } );
+		as::post( ex, [ex, i]{ post_chain(ex, i + 1); } );
 }
 
 as::TaskResult<void>
@@ -622,17 +622,17 @@ void post_test()
 	for( int i = 0; i < chains; ++i )
 		as::post( ex, post_chain, ex, 0 );
 
-	as::post( ex, []() { return foo(99); },
-	          [](foo i) { std::cout << i << " \n"; } );
+	// as::post( ex, []() { return foo(99); },
+	//           [](foo i) { std::cout << i << " \n"; } );
 
-	as::post( ex, []() { return 99; },
-	          [](int&& x) { std::cout << x << "finished\n"; },
-	          []() { std::cout << "amazing!\n"; }
-	          , []() { std::cout << "amazing!\n"; }
-	          , []() { std::cout << "amazing!\n"; }
-	          , []() { std::cout << "amazing!\n"; }
-	          , []() { std::cout << "amazing!\n"; }
-	        );
+	// as::post( ex, []() { return 99; },
+	//           [](int&& x) { std::cout << x << "finished\n"; },
+	//           []() { std::cout << "amazing!\n"; }
+	//           , []() { std::cout << "amazing!\n"; }
+	//           , []() { std::cout << "amazing!\n"; }
+	//           , []() { std::cout << "amazing!\n"; }
+	//           , []() { std::cout << "amazing!\n"; }
+	//         );
 
 	clock::time_point start = clock::now();
 	{
@@ -701,7 +701,7 @@ int main(int argc, char *argv[])
 
 	// sync_test();
 
-	// function_context_switch_test();
+	function_context_switch_test();
 
 	post_test();
 

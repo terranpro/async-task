@@ -50,6 +50,8 @@ void post(Ex& ex, Func&& func, ThenFuncs&&... funcs)
 
 	auto c = sc::build( ib(), std::forward<Func>(func), std::forward<ThenFuncs>(funcs)... );
 
+	// std::cout << typeid(typename sc::type).name() << "\n";
+
 	post( ex, [c]() mutable {
 			c.invoke();
 		} );
@@ -66,14 +68,18 @@ async(Ex& ex, Func&& func, Args&&... args)
 	// 	                  std::forward<Func>(func),
 	// 	                  std::forward<Args>(args)... ) );
 
-	// using sc = SplitByCallable< Func, Args... >;
-	// using ib = invoker_builder< typename sc::type, typename sc::args >;
+	using sc = SplitByCallable< Func, Args... >;
+	using ib = invoker_builder< typename sc::type, typename sc::args >;
 
-	// auto c = sc::build( ib(), std::forward<Func>(func), std::forward<Args>(args)... );
+	auto c = sc::build( ib(), std::forward<Func>(func), std::forward<Args>(args)... );
 
-	// post( ex, [c]() mutable {
-	// 		c.invoke();
-	// } );
+	// std::cout << typeid(typename sc::type).name() << "\n";
+
+	auto ff = [c]() mutable {
+		c.invoke();
+	};
+
+	ex.schedule( PostTask<Ex, decltype(ff)>( &ex, std::move(ff) ) );
 
 	return {};
 }
