@@ -249,13 +249,13 @@ struct invoker_builder< std::tuple<FirstCallable, Callables...>, std::tuple<Args
 	typedef chain_type result_type;
 
 	template<class... Cs, class... A>
-	chain_type build_chain(inv1_type&& c1, Cs&&... cs)
+	static chain_type build_chain(inv1_type&& c1, Cs&&... cs)
 	{
 		return chain_type( std::move(c1), invocation<Callables>{ std::forward<Cs>(cs) }... );
 	}
 
 	template<class F, class... A>
-	result_type build(F&& c, Callables const&... cs, A&&... args)
+	static result_type build(F&& c, Callables const&... cs, A&&... args)
 	{
 		static_assert( sizeof...(A) == sizeof...(Args), "Argument count mismatch" );
 
