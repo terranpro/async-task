@@ -141,12 +141,44 @@ auto tuple_invoke(Func&& f, ArgTuple&& arg_tuple)
 	                          >::value >::type{} );
 }
 
+
+
+template<class Func, class Next, class... Args>
+auto chain_invoke_impl( Func&& f, Next&& n, std::true_type, Args&&... args )
+	-> decltype( std::forward<Next>(n)( std::forward<Func>(f)( std::forward<Args>(args)... ) ) )
+{
+	return std::forward<Next>(n)( std::forward<Func>(f)( std::forward<Args>(args)... ) );
+}
+
+template<class Func, class Next, class... Args>
+auto chain_invoke_impl( Func&& f, Next&& n, std::false_type, Args&&... args )
+	-> decltype( invoke( std::forward<Next>(n) ) )
+{
+	invoke( std::forward<Func>(f), std::forward<Args>(args)... );
+	return invoke( std::forward<Next>(n) );
+}
+
+template<class Func, class Next, class... Args>
+auto chain_invoke( Func&& f, Next&& n, Args&&... args )
+	-> decltype( chain_invoke_impl( std::forward<Func>(f),
+	                                std::forward<Next>(n),
+	                                typename HasArg<
+	                                typename std::remove_reference<Next>::type::func_type
+	                                >::type{},
+	                                std::forward<Args>(args)... ) )
+{
+	return chain_invoke_impl( std::forward<Func>(f),
+	                          std::forward<Next>(n),
+	                          typename HasArg<
+	                          typename std::remove_reference<Next>::type::func_type
+	                          >::type{},
+	                          std::forward<Args>(args)... );
+}
+
 template<class Func>
 struct invocation
 {
 	typedef typename convert_functor<Func>::type func_type;
-	typedef FunctionSignature<Func> signature_type;
-	typedef typename FunctionSignature<Func>::return_type result_type;
 
 	func_type func;
 
@@ -159,15 +191,17 @@ struct invocation
 	invocation(invocation&&) = default;
 
 	template<class... A>
-	result_type invoke(A&&... args)
+	auto invoke(A&&... args)
+		-> decltype( ::as::invoke( func, std::forward<A>(args)... ) )
 	{
 		return ::as::invoke( func, std::forward<A>(args)... );
 	}
 
 	template<class... A>
-	result_type operator()(A&&... args)
+	auto operator()(A&&... args)
+		-> decltype( this->invoke( std::forward<A>(args)... ) )
 	{
-		return invoke( std::forward<A>(args)... );
+		return this->invoke( std::forward<A>(args)... );
 	}
 };
 
@@ -175,9 +209,6 @@ template<class Func, class... Args>
 struct full_invocation
 {
 	typedef std::tuple< typename std::decay<Args>::type...> arg_tuple_type;
-
-	typedef decltype( std::declval<Func>()( std::declval< typename std::decay<Args>::type >()... ) )
-	result_type;
 
 private:
 	invocation<Func> inv;
@@ -192,14 +223,16 @@ public:
 		, arg_tuple( std::forward<A>(args)... )
 	{}
 
-	result_type invoke()
+	auto invoke()
+		-> decltype( tuple_invoke( inv, arg_tuple ) )
 	{
 		return ::as::tuple_invoke( inv, arg_tuple );
 	}
 
-	result_type operator()()
+	auto operator()()
+		-> decltype( this->invoke() )
 	{
-		return invoke();
+		return this->invoke();
 	}
 };
 
@@ -212,41 +245,27 @@ struct chain_invocation<First, Second, Invokers...>
 {
 	typedef chain_invocation<Second, Invokers...> base_type;
 
-	typedef typename base_type::result_type result_type;
-
-	First inv1;
+	First inv;
 
 	template<class F, class S, class... Is>
 	chain_invocation(F&& i1, S&& i2, Is&&... invks)
 		: base_type( std::forward<S>(i2), std::forward<Is>(invks)... )
-		, inv1( std::forward<F>(i1) )
+		, inv( std::forward<F>(i1) )
 	{}
 
+public:
 	template<class... Args>
-	result_type invoke(Args&&... args)
+	auto invoke(Args&&... args)
+		-> decltype( chain_invoke( inv, std::declval<base_type>().inv, std::forward<Args>(args)... ) )
 	{
-		return do_invoke( typename HasArg< typename Second::func_type >::type{},
-		                  std::forward<Args>(args)... );
+		return chain_invoke( inv, base_type::inv, std::forward<Args>(args)... );
 	}
 
 	template<class... Args>
-	result_type operator()(Args&&... args)
+	auto operator()(Args&&... args)
+		-> decltype( this->invoke( std::forward<Args>(args)... ) )
 	{
-		return invoke( std::forward<Args>(args)... );
-	}
-
-private:
-	template<class... Args>
-	result_type do_invoke( std::true_type, Args&&... args )
-	{
-		return base_type::invoke( inv1.invoke( std::forward<Args>(args)... ) );
-	}
-
-	template<class... Args>
-	result_type do_invoke( std::false_type, Args&&... args )
-	{
-		inv1.invoke( std::forward<Args>(args)... );
-		return base_type::invoke();
+		return this->invoke( std::forward<Args>(args)... );
 	}
 };
 
@@ -256,24 +275,24 @@ private:
 template<class First>
 struct chain_invocation<First>
 {
-	typedef typename First::result_type result_type;
-
-	First first;
+	First inv;
 
 	explicit chain_invocation(First&& f)
-		: first(std::move(f))
+		: inv(std::move(f))
 	{}
 
 	template<class... Args>
-	result_type invoke(Args&&... args)
+	auto invoke(Args&&... args)
+		-> decltype( inv.invoke( std::forward<Args>(args)... ) )
 	{
-		return first.invoke( std::forward<Args>(args)... );
+		return inv.invoke( std::forward<Args>(args)... );
 	}
 
 	template<class... Args>
-	result_type operator()(Args&&... args)
+	auto operator()(Args&&... args)
+		-> decltype( this->invoke( std::forward<Args>(args)... ) )
 	{
-		return invoke( std::forward<Args>(args)... );
+		return this->invoke( std::forward<Args>(args)... );
 	}
 };
 
@@ -284,7 +303,7 @@ template<class FirstCallable, class... Callables, class... Args>
 struct invoker_builder< std::tuple<FirstCallable, Callables...>, std::tuple<Args...> >
 {
 	typedef full_invocation<FirstCallable, Args...> inv1_type;
-	typedef typename inv1_type::result_type inv1_result_type;
+
 	typedef chain_invocation< inv1_type, invocation<Callables>... >  chain_type;
 	typedef chain_type result_type;
 
