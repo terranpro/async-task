@@ -144,7 +144,6 @@ struct invocation
 
 template<class Func, class... Args>
 struct full_invocation
-	: public invocation<Func>
 {
 	typedef std::tuple< typename std::decay<Args>::type...> arg_tuple_type;
 
@@ -152,12 +151,13 @@ struct full_invocation
 	result_type;
 
 private:
+	invocation<Func> inv;
 	arg_tuple_type arg_tuple;
 
 public:
 	template<class F, class... A>
 	explicit full_invocation(F&& f, A&&... args)
-		: invocation<Func>( std::forward<F>(f) )
+		: inv( std::forward<F>(f) )
 		, arg_tuple( std::forward<A>(args)... )
 	{}
 
@@ -165,7 +165,7 @@ public:
 	{
 		constexpr int TSize = std::tuple_size< arg_tuple_type >::value;
 
-		return this->invoke_impl( arg_tuple, typename build_indices<TSize>::type{} );
+		return invoke_impl( arg_tuple, typename build_indices<TSize>::type{} );
 	}
 
 	result_type operator()()
@@ -177,7 +177,7 @@ private:
 	template<class ArgTuple, size_t... Ids>
 	result_type invoke_impl(ArgTuple&& arg_tuple, indices<Ids...>)
 	{
-		return this->func( std::get<Ids>( std::forward<ArgTuple>(arg_tuple) )... );
+		return inv.invoke( std::get<Ids>( std::forward<ArgTuple>(arg_tuple) )... );
 	}
 };
 
