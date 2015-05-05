@@ -16,6 +16,13 @@
 #include <typeinfo>
 #include <tuple>
 
+// TODO: helper for SFINAE
+template<class T>
+struct void_type
+{
+	typedef void type;
+};
+
 #define BUILD_ARG_TYPE(N)	  \
 	template<class T> \
 	struct ArgType<T, N> \
@@ -147,8 +154,8 @@ struct FunctionSignature
 template<class C>
 struct IsCallableClassHelper
 {
-	typedef char (&yes)[2];
-	typedef char (& no)[1];
+	typedef std::true_type yes;
+	typedef std::false_type no;
 
 	template<class T>
 	static yes check( typename ClassFunctionSignatureHelper<T>::type );
@@ -156,7 +163,7 @@ struct IsCallableClassHelper
 	template<class>
 	static no check(...);
 
-	static constexpr bool value = sizeof( check<C>( 0 ) ) == sizeof(yes);
+	static constexpr bool value = std::is_same< decltype(check<C>( 0 )), yes >::value;
 };
 
 template<class Func>
@@ -173,17 +180,95 @@ struct IsCallable
 	                    IsCallableFunctionHelper<T> >::type
 {};
 
-template<class T>
+// IsCallable with Signature/Args
+template<class C, class... Args>
+struct IsCallableWithClassHelper
+{
+	typedef std::true_type yes;
+	typedef std::false_type no;
+
+	template<class U, U> struct check_helper;
+
+	template<class T>
+	static auto check( int ) -> decltype( std::declval<T>()( std::declval<Args>()... ), yes() );
+
+	template<class>
+	static no check(...);
+
+	static constexpr bool value = std::is_same< decltype(check<C>( 0 )), std::true_type >::value;
+};
+
+template<class C, class R, class... Args>
+struct IsCallableWithClassHelper<C, R(Args...)>
+{
+	typedef std::true_type yes;
+	typedef std::false_type no;
+
+	template<class U, U> struct check_helper;
+
+	template<class T>
+	static auto check( int ) -> decltype( std::declval<T>()( std::declval<Args>()... ), yes() );
+
+	template<class>
+	static no check(...);
+
+	static constexpr bool value = std::is_same< decltype(check<C>( 0 )), std::true_type >::value;
+};
+
+template<class T, class... Args>
+struct IsCallableWithFunctionHelper
+{
+	typedef std::true_type yes;
+	typedef std::false_type no;
+
+	template<class U>
+	static auto check( int ) -> decltype( std::declval<U>()( std::declval<Args>()... ), yes() );
+
+	template<class U>
+	static no check(...);
+
+	static constexpr bool value = std::is_same< decltype(check<T>(0)), std::true_type >::value;
+};
+
+template<class T, class R, class... Args>
+struct IsCallableWithFunctionHelper<T, R(Args...)>
+{
+	typedef std::true_type yes;
+	typedef std::false_type no;
+
+	template<class U>
+	static auto check( int ) -> decltype( std::declval<U>()( std::declval<Args>()... ), yes() );
+
+	template<class U>
+	static no check(...);
+
+	static constexpr bool value = std::is_same< decltype(check<T>(0)), std::true_type >::value;
+};
+
+template<class T, class... Args>
+struct IsCallableWith
+	: std::conditional< std::is_class<T>::value,
+	                    IsCallableWithClassHelper<T, Args...>,
+	                    IsCallableWithFunctionHelper<T, Args...> >::type
+{};
+
+template<class T, class Enable = void>
 struct HasArgHelper
-{ typedef void type; };
+	: std::false_type
+{};
+
+template<class T>
+struct HasArgHelper<T, typename void_type<typename FunctionSignature<T>::arg1_type>::type >
+	: std::true_type
+{};
 
 template<class T, class Enable = void>
 struct HasArg : std::false_type
 {};
 
 template<class T>
-struct HasArg<T, typename HasArgHelper< typename FunctionSignature<T>::arg1_type >::type >
-	: std::true_type
+struct HasArg<T, typename std::enable_if< IsCallable<T>::value >::type >
+	: HasArgHelper<T>
 {};
 
 // Split a list of types into tuple of callables and a tuple of args
