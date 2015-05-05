@@ -135,10 +135,10 @@ struct invocation
 		return func( std::forward<A>(args)... );
 	}
 
-	template<class ArgTuple, size_t... Ids>
-	result_type invoke_impl(ArgTuple&& arg_tuple, indices<Ids...>)
+	template<class... A>
+	result_type operator()(A&&... args)
 	{
-		return func( std::get<Ids>( std::forward<ArgTuple>(arg_tuple) )... );
+		return invoke( std::forward<A>(args)... );
 	}
 };
 
@@ -167,6 +167,18 @@ public:
 
 		return this->invoke_impl( arg_tuple, typename build_indices<TSize>::type{} );
 	}
+
+	result_type operator()()
+	{
+		return invoke();
+	}
+
+private:
+	template<class ArgTuple, size_t... Ids>
+	result_type invoke_impl(ArgTuple&& arg_tuple, indices<Ids...>)
+	{
+		return this->func( std::get<Ids>( std::forward<ArgTuple>(arg_tuple) )... );
+	}
 };
 
 template<class... Invokers>
@@ -193,6 +205,12 @@ struct chain_invocation<First, Second, Invokers...>
 	{
 		return do_invoke( typename HasArg< typename Second::func_type >::type{},
 		                  std::forward<Args>(args)... );
+	}
+
+	template<class... Args>
+	result_type operator()(Args&&... args)
+	{
+		return invoke( std::forward<Args>(args)... );
 	}
 
 private:
