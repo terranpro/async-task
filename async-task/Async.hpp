@@ -37,9 +37,7 @@ void post(Ex& ex, Func&& func, Args&&... args)
 
 	auto c = ib::build( std::forward<Func>(func), std::forward<Args>(args)... );
 
-	post( ex, [c]() mutable {
-			c.invoke();
-		} );
+	ex.schedule( PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
 }
 
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext
@@ -52,9 +50,7 @@ async(Ex& ex, Func&& func, Args&&... args)
 
 	auto c = ib::build( std::forward<Func>(func), std::forward<Args>(args)... );
 
-	post( ex, [c]() mutable {
-			c.invoke();
-		} );
+	ex.schedule( PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
 
 	return {};
 }

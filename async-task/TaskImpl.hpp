@@ -269,7 +269,7 @@ struct PostTask
 	typedef Exec executor_type;
 	typedef Func function_type;
 
-	invocation<Func> func;
+	Func func;
 	Exec *executor;
 
 	template<class F>
@@ -280,7 +280,7 @@ struct PostTask
 
 	TaskStatus Invoke()
 	{
-		func.invoke();
+		func();
 
 		return TaskStatus::Finished;
 	}
