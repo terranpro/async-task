@@ -162,15 +162,17 @@ template<class Func, class Next, class... Args>
 auto chain_invoke( Func&& f, Next&& n, Args&&... args )
 	-> decltype( chain_invoke_impl( std::forward<Func>(f),
 	                                std::forward<Next>(n),
-	                                typename HasArg<
-	                                typename std::remove_reference<Next>::type::func_type
+	                                typename IsCallableWith<
+	                                typename std::remove_reference<Next>::type::func_type,
+	                                decltype( std::declval<Func>()( std::declval<Args>()... ) )
 	                                >::type{},
 	                                std::forward<Args>(args)... ) )
 {
 	return chain_invoke_impl( std::forward<Func>(f),
 	                          std::forward<Next>(n),
-	                          typename HasArg<
-	                          typename std::remove_reference<Next>::type::func_type
+	                          typename IsCallableWith<
+	                          typename std::remove_reference<Next>::type::func_type,
+	                          decltype( std::declval<Func>()( std::declval<Args>()... ) )
 	                          >::type{},
 	                          std::forward<Args>(args)... );
 }

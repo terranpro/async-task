@@ -164,6 +164,7 @@ struct IsCallableClassHelper
 	static no check(...);
 
 	static constexpr bool value = std::is_same< decltype(check<C>( 0 )), yes >::value;
+	typedef decltype( check<C>(0) ) type;
 };
 
 template<class Func>
@@ -196,6 +197,7 @@ struct IsCallableWithClassHelper
 	static no check(...);
 
 	static constexpr bool value = std::is_same< decltype(check<C>( 0 )), std::true_type >::value;
+	typedef decltype( check<C>(0) ) type;
 };
 
 template<class C, class R, class... Args>
@@ -213,6 +215,7 @@ struct IsCallableWithClassHelper<C, R(Args...)>
 	static no check(...);
 
 	static constexpr bool value = std::is_same< decltype(check<C>( 0 )), std::true_type >::value;
+	typedef decltype( check<C>(0) ) type;
 };
 
 template<class T, class... Args>
@@ -228,6 +231,7 @@ struct IsCallableWithFunctionHelper
 	static no check(...);
 
 	static constexpr bool value = std::is_same< decltype(check<T>(0)), std::true_type >::value;
+	typedef decltype( check<T>(0) ) type;
 };
 
 template<class T, class R, class... Args>
@@ -243,6 +247,7 @@ struct IsCallableWithFunctionHelper<T, R(Args...)>
 	static no check(...);
 
 	static constexpr bool value = std::is_same< decltype(check<T>(0)), std::true_type >::value;
+	typedef decltype( check<T>(0) ) type;
 };
 
 template<class T, class... Args>
