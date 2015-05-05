@@ -112,6 +112,35 @@ struct convert_functor
 	                                 >::type::type type;
 };
 
+template<class Func, class... A>
+auto invoke(Func&& f, A&&... args)
+	-> decltype( std::forward<Func>(f)( std::forward<A>(args)... ) )
+{
+	return std::forward<Func>(f)( std::forward<A>(args)... );
+}
+
+template<class Func, class ArgTuple, size_t... Ids>
+auto tuple_invoke_impl(Func&& f, ArgTuple&& arg_tuple, indices<Ids...>)
+	-> decltype( std::forward<Func>(f)( std::get<Ids>( std::forward<ArgTuple>(arg_tuple) )... ) )
+{
+	return std::forward<Func>(f)( std::get<Ids>( std::forward<ArgTuple>(arg_tuple) )... );
+}
+
+template<class Func, class ArgTuple>
+auto tuple_invoke(Func&& f, ArgTuple&& arg_tuple)
+	-> decltype( tuple_invoke_impl( std::forward<Func>(f),
+	                                std::forward<ArgTuple>(arg_tuple),
+	                                typename build_indices< std::tuple_size<
+	                                typename std::remove_reference<ArgTuple>::type
+	                                >::value >::type{} ) )
+{
+	return tuple_invoke_impl( std::forward<Func>(f),
+	                          std::forward<ArgTuple>(arg_tuple),
+	                          typename build_indices< std::tuple_size<
+	                          typename std::remove_reference<ArgTuple>::type
+	                          >::value >::type{} );
+}
+
 template<class Func>
 struct invocation
 {
@@ -132,7 +161,7 @@ struct invocation
 	template<class... A>
 	result_type invoke(A&&... args)
 	{
-		return func( std::forward<A>(args)... );
+		return ::as::invoke( func, std::forward<A>(args)... );
 	}
 
 	template<class... A>
@@ -154,6 +183,8 @@ private:
 	invocation<Func> inv;
 	arg_tuple_type arg_tuple;
 
+	static constexpr int TSize = std::tuple_size< arg_tuple_type >::value;
+
 public:
 	template<class F, class... A>
 	explicit full_invocation(F&& f, A&&... args)
@@ -163,21 +194,12 @@ public:
 
 	result_type invoke()
 	{
-		constexpr int TSize = std::tuple_size< arg_tuple_type >::value;
-
-		return invoke_impl( arg_tuple, typename build_indices<TSize>::type{} );
+		return ::as::tuple_invoke( inv, arg_tuple );
 	}
 
 	result_type operator()()
 	{
 		return invoke();
-	}
-
-private:
-	template<class ArgTuple, size_t... Ids>
-	result_type invoke_impl(ArgTuple&& arg_tuple, indices<Ids...>)
-	{
-		return inv.invoke( std::get<Ids>( std::forward<ArgTuple>(arg_tuple) )... );
 	}
 };
 
