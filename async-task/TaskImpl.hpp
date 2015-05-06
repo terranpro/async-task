@@ -241,26 +241,26 @@ public:
 template<class... Invokers>
 struct chain_invocation;
 
-template<class First, class Second, class... Invokers>
-struct chain_invocation<First, Second, Invokers...>
-	: chain_invocation<Second, Invokers...>
+template<class First, class... Invokers>
+struct chain_invocation<First, Invokers...>
 {
-	typedef chain_invocation<Second, Invokers...> base_type;
+	typedef chain_invocation<Invokers...> base_type;
 
 	First inv;
+	base_type next;
 
-	template<class F, class S, class... Is>
-	chain_invocation(F&& i1, S&& i2, Is&&... invks)
-		: base_type( std::forward<S>(i2), std::forward<Is>(invks)... )
-		, inv( std::forward<F>(i1) )
+	template<class F, class... Is>
+	chain_invocation(F&& i1, Is&&... invks)
+		: inv( std::forward<F>(i1) )
+		, next( std::forward<Is>(invks)... )
 	{}
 
 public:
 	template<class... Args>
 	auto invoke(Args&&... args)
-		-> decltype( chain_invoke( inv, std::declval<base_type>().inv, std::forward<Args>(args)... ) )
+		-> decltype( chain_invoke( inv, std::declval<base_type>(), std::forward<Args>(args)... ) )
 	{
-		return chain_invoke( inv, base_type::inv, std::forward<Args>(args)... );
+		return chain_invoke( inv, next, std::forward<Args>(args)... );
 	}
 
 	template<class... Args>
