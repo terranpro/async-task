@@ -32,12 +32,17 @@ void post(Ex& ex, Func&& func)
 template<class Ex, class Func, class... Args>
 void post(Ex& ex, Func&& func, Args&&... args)
 {
-	using sc = SplitBy< IsCallable, Func, Args... >;
-	using ib = invoker_builder< typename sc::true_types, typename sc::false_types >;
+	// using sc = SplitBy< IsCallable, Func, Args... >;
+	// using ib = invoker_builder< typename sc::true_types, typename sc::false_types >;
 
-	auto c = ib::build( std::forward<Func>(func), std::forward<Args>(args)... );
+	// auto c = ib::build( std::forward<Func>(func), std::forward<Args>(args)... );
 
-	ex.schedule( PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
+	chain_invocation<invocation<Func>, invocation<Args>...> c
+		( invocation<Func>( std::forward<Func>(func) ),
+		  invocation<Args>(std::forward<Args>(args))... );
+
+	schedule( ex, PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
+	//ex.schedule( PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
 }
 
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext

@@ -112,6 +112,12 @@ struct convert_functor
 	                                 >::type::type type;
 };
 
+template<class Ex, class Func>
+void schedule(Ex&& ex, Func&& f)
+{
+	std::forward<Ex>(ex).schedule( std::forward<Func>( f ) );
+}
+
 template<class Func, class... A>
 auto invoke(Func&& f, A&&... args)
 	-> decltype( std::forward<Func>(f)( std::forward<A>(args)... ) )
@@ -250,7 +256,7 @@ struct chain_invocation<First, Invokers...>
 	base_type next;
 
 	template<class F, class... Is>
-	chain_invocation(F&& i1, Is&&... invks)
+	explicit chain_invocation(F&& i1, Is&&... invks)
 		: inv( std::forward<F>(i1) )
 		, next( std::forward<Is>(invks)... )
 	{}

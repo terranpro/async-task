@@ -620,18 +620,21 @@ void post_test()
 	as::ThreadExecutor ex( "testing" );
 
 	for( int i = 0; i < chains; ++i )
-		as::post( ex, post_chain, ex, 0 );
+		as::post( ex, std::bind(post_chain, ex, 0 ) );
 
 	as::post( ex, []() { return foo(99); },
 	          [](foo i) { std::cout << i << " \n"; } );
 
-	as::post( ex, []() { return 99; },
-	          [](int&& x) { std::cout << x << "finished\n"; },
-	          []() { std::cout << "amazing!\n"; }
+	as::post( ex,
+	          []() { return 99; }
+	          , [](int&& x) { std::cout << x << "finished\n"; }
 	          , []() { std::cout << "amazing!\n"; }
 	          , []() { std::cout << "amazing!\n"; }
 	          , []() { std::cout << "amazing!\n"; }
 	          , []() { std::cout << "amazing!\n"; }
+	          , []() { std::cout << "amazing!\n"; }
+	          , []() { return 69; }
+	          , std::bind( [](int i) { std::cout << "recv: " << i << "\n"; }, std::placeholders::_1 )
 	        );
 
 	clock::time_point start = clock::now();
