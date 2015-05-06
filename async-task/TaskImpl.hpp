@@ -163,7 +163,7 @@ auto chain_invoke( Func&& f, Next&& n, Args&&... args )
 	-> decltype( chain_invoke_impl( std::forward<Func>(f),
 	                                std::forward<Next>(n),
 	                                typename IsCallableWith<
-	                                typename std::remove_reference<Next>::type::func_type,
+	                                typename std::remove_reference<Next>::type,
 	                                decltype( std::declval<Func>()( std::declval<Args>()... ) )
 	                                >::type{},
 	                                std::forward<Args>(args)... ) )
@@ -171,7 +171,7 @@ auto chain_invoke( Func&& f, Next&& n, Args&&... args )
 	return chain_invoke_impl( std::forward<Func>(f),
 	                          std::forward<Next>(n),
 	                          typename IsCallableWith<
-	                          typename std::remove_reference<Next>::type::func_type,
+	                          typename std::remove_reference<Next>::type,
 	                          decltype( std::declval<Func>()( std::declval<Args>()... ) )
 	                          >::type{},
 	                          std::forward<Args>(args)... );
