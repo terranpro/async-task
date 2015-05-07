@@ -112,6 +112,51 @@ struct convert_functor
 	                                 >::type::type type;
 };
 
+template<class Exec, class Func>
+struct PostTask
+{
+	typedef Exec executor_type;
+	typedef Func function_type;
+
+	Func func;
+	Exec *executor;
+
+	template<class F>
+	PostTask(Exec *ex, F&& f)
+		: func( std::forward<F>(f) )
+		, executor(ex)
+	{}
+
+	TaskStatus Invoke()
+	{
+		func();
+
+		return TaskStatus::Finished;
+	}
+
+	void Yield()
+	{}
+
+	void Cancel()
+	{}
+};
+
+template<class Exec, class Func>
+struct AsyncTask
+{
+	typedef Exec executor_type;
+	typedef Func function_type;
+
+	Func func;
+	Exec *executor;
+
+	AsyncTask(Exec *ex, Func func)
+		: func( std::move(func) )
+		, executor(ex)
+	{}
+
+};
+
 template<class Ex, class Func>
 void schedule(Ex&& ex, Func&& f)
 {
@@ -244,21 +289,46 @@ public:
 	}
 };
 
-template<class... Invokers>
+template<class Ex, class Func>
+struct bound_invocation
+{
+	typedef typename std::remove_reference<Ex>::type executor_type;
+
+	invocation<Func> inv;
+	executor_type ex;
+
+	template<class E, class F>
+	bound_invocation(E&& e, F&& func)
+		: ex( std::forward<E>(e) )
+		, inv( std::forward<F>(func) )
+	{}
+};
+
+template<class Ex, class Func, class... Args>
+auto bind(Ex&& ex, Func&& func, Args&&... args)
+	-> bound_invocation<Ex, decltype(std::bind(func,args...))>
+{
+	return { std::forward<Ex>(ex), std::bind( std::forward<Func>(func),
+	                                          std::forward<Args>(args)... ) };
+}
+
+template<class Ex, class... Invokers>
 struct chain_invocation;
 
-template<class First, class... Invokers>
-struct chain_invocation<First, Invokers...>
+template<class Ex, class First, class... Invokers>
+struct chain_invocation<Ex, First, Invokers...>
 {
-	typedef chain_invocation<Invokers...> base_type;
+	typedef chain_invocation<Ex, Invokers...> base_type;
 
-	First inv;
+	invocation<First> inv;
 	base_type next;
+	Ex ex;
 
 	template<class F, class... Is>
-	explicit chain_invocation(F&& i1, Is&&... invks)
-		: inv( std::forward<F>(i1) )
-		, next( std::forward<Is>(invks)... )
+	explicit chain_invocation(Ex ex, F&& i1, Is&&... invks)
+		: ex( ex )
+		, inv( std::forward<F>(i1) )
+		, next( ex, std::forward<Is>(invks)... )
 	{}
 
 public:
@@ -277,16 +347,63 @@ public:
 	}
 };
 
+template<class Ex, class FirstEx, class First, class... Invokers>
+struct chain_invocation<Ex, bound_invocation<FirstEx,First>, Invokers...>
+{
+	typedef chain_invocation<Ex, Invokers...> base_type;
+	typedef typename bound_invocation<FirstEx,First>::executor_type executor_type;
+
+	invocation<First> inv;
+	base_type next;
+	executor_type ex;
+
+	template<class F, class... Is>
+	explicit chain_invocation(Ex ex, bound_invocation<FirstEx,F> i1, Is&&... invks)
+		: ex( std::move(i1.ex) )
+		, inv( std::move(i1.inv) )
+		, next( ex, std::forward<Is>(invks)... )
+	{}
+
+public:
+	template<class... Args>
+	auto invoke(Args&&... args)
+		-> decltype( chain_invoke( inv, std::declval<base_type>(), std::forward<Args>(args)... ) )
+	{
+		return chain_invoke( inv, next, std::forward<Args>(args)... );
+	}
+
+	template<class... Args>
+	void schedule(Args&&... args)
+	{
+		auto x = std::bind( [=](Args... a)
+		                    {
+			                    return chain_invoke(inv, next, std::move(a)... );
+		                    },
+		                    std::forward<Args>(args)... );
+
+		::as::schedule( ex, PostTask<Ex, decltype(x)>( &ex, std::move(x) ) );
+
+	}
+
+	template<class... Args>
+	void operator()(Args&&... args)
+	{
+		return this->schedule( std::forward<Args>(args)... );
+	}
+};
+
 // TODO: this specialization is awkward and was difficult to get
 // right; it needs to be initialized with a fully ready
 // full_invocation or invocation
-template<class First>
-struct chain_invocation<First>
+template<class Ex, class First>
+struct chain_invocation<Ex, First>
 {
-	First inv;
+	invocation<First> inv;
+	Ex ex;
 
-	explicit chain_invocation(First&& f)
+	explicit chain_invocation(Ex ex, First&& f)
 		: inv(std::move(f))
+		, ex(std::move(ex))
 	{}
 
 	template<class... Args>
@@ -304,76 +421,14 @@ struct chain_invocation<First>
 	}
 };
 
-template<class Callables, class Args>
-struct invoker_builder;
-
-template<class FirstCallable, class... Callables, class... Args>
-struct invoker_builder< std::tuple<FirstCallable, Callables...>, std::tuple<Args...> >
+template<class Ex, class Func, class... Conts>
+auto build_chain(Ex& ex, Func&& func, Conts&&... conts)
+	-> chain_invocation<Ex, Func, Conts...>
 {
-	typedef full_invocation<FirstCallable, Args...> inv1_type;
-
-	typedef chain_invocation< inv1_type, invocation<Callables>... >  chain_type;
-	typedef chain_type result_type;
-
-	template<class... Cs, class... A>
-	static chain_type build_chain(inv1_type&& c1, Cs&&... cs)
-	{
-		return chain_type( std::move(c1), invocation<Callables>{ std::forward<Cs>(cs) }... );
-	}
-
-	template<class F, class... A>
-	static result_type build(F&& c, Callables const&... cs, A&&... args)
-	{
-		static_assert( sizeof...(A) == sizeof...(Args), "Argument count mismatch" );
-
-		return build_chain( inv1_type( std::forward<F>(c), std::forward<A>(args)... ), cs... );
-	}
-};
-
-template<class Exec, class Func>
-struct PostTask
-{
-	typedef Exec executor_type;
-	typedef Func function_type;
-
-	Func func;
-	Exec *executor;
-
-	template<class F>
-	PostTask(Exec *ex, F&& f)
-		: func( std::forward<F>(f) )
-		, executor(ex)
-	{}
-
-	TaskStatus Invoke()
-	{
-		func();
-
-		return TaskStatus::Finished;
-	}
-
-	void Yield()
-	{}
-
-	void Cancel()
-	{}
-};
-
-template<class Exec, class Func>
-struct AsyncTask
-{
-	typedef Exec executor_type;
-	typedef Func function_type;
-
-	invocation<Func> func;
-	Exec *executor;
-
-	AsyncTask(Exec *ex, Func func)
-		: func( std::move(func) )
-		, executor(ex)
-	{}
-
-};
+	return chain_invocation<Ex, Func, Conts...>( ex,
+	                                             std::forward<Func>(func),
+	                                             std::forward<Conts>(conts)... );
+}
 
 } // namespace as
 

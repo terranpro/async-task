@@ -37,9 +37,7 @@ void post(Ex& ex, Func&& func, Args&&... args)
 
 	// auto c = ib::build( std::forward<Func>(func), std::forward<Args>(args)... );
 
-	chain_invocation<invocation<Func>, invocation<Args>...> c
-		( invocation<Func>( std::forward<Func>(func) ),
-		  invocation<Args>(std::forward<Args>(args))... );
+	auto c = build_chain( ex, std::forward<Func>(func), std::forward<Args>(args)... );
 
 	schedule( ex, PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
 	//ex.schedule( PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
@@ -48,14 +46,18 @@ void post(Ex& ex, Func&& func, Args&&... args)
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext
 template<class Ex, class Func, class... Args>
 TaskFuture< void >
+async(Ex& ex, Func&& func)
+{
+	schedule( ex, PostTask<Ex,Func>( &ex, std::forward<Func>(func) ) );
+}
+
+template<class Ex, class Func, class... Args>
+TaskFuture< void >
 async(Ex& ex, Func&& func, Args&&... args)
 {
-	using sc = SplitBy< IsCallable, Func, Args... >;
-	using ib = invoker_builder< typename sc::true_types, typename sc::false_types >;
+	auto c = build_chain( ex, std::forward<Func>(func), std::forward<Args>(args)... );
 
-	auto c = ib::build( std::forward<Func>(func), std::forward<Args>(args)... );
-
-	ex.schedule( PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
+	schedule( ex, PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
 
 	return {};
 }

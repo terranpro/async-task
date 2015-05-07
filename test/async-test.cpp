@@ -570,7 +570,7 @@ const unsigned int iterations = 1000000;
 void chain(as::ThreadExecutor& ex, unsigned int i)
 {
 	if (i < iterations)
-		as::async( ex, chain, std::ref(ex), i + 1 );
+		as::async( ex, [&ex, i]{ chain( ex, i + 1 ); } );
 }
 
 void post_chain(as::ThreadExecutor ex, unsigned int i)
@@ -583,7 +583,7 @@ as::TaskResult<void>
 channel_chain(as::ThreadExecutor ex, unsigned int i)
 {
 	if (i < iterations)
-		as::async( ex, channel_chain, ex, i + 1);
+		as::async( ex, std::bind(channel_chain, ex, i + 1) );
 
 	return as::cancel;
 }
@@ -619,29 +619,37 @@ void post_test()
 
 	as::ThreadExecutor ex( "testing" );
 
+	as::ThreadExecutor ex2;
+
 	for( int i = 0; i < chains; ++i )
 		as::post( ex, std::bind(post_chain, ex, 0 ) );
 
-	as::post( ex, []() { return foo(99); },
-	          [](foo i) { std::cout << i << " \n"; } );
-
-	as::post( ex,
-	          []() { return 99; }
-	          , [](int&& x) { std::cout << x << "finished\n"; }
-	          , []() { std::cout << "amazing!\n"; }
-	          , []() { std::cout << "amazing!\n"; }
-	          , []() { std::cout << "amazing!\n"; }
-	          , []() { std::cout << "amazing!\n"; }
-	          , []() { std::cout << "amazing!\n"; }
-	          , []() { return 69; }
-	          , std::bind( [](int i) { std::cout << "recv: " << i << "\n"; }, std::placeholders::_1 )
+	as::post( ex, []() { return foo(99); }
+// , [](foo i) { std::cout << i << " \n"; }
+	          , as::bind( ex2, []() { std::cout << "fucking amazing!\n"; } )
+, []() {}
 	        );
+
+	// as::post( ex,
+	//           []() { return 99; }
+	//           , [](int&& x) { std::cout << x << "finished\n"; }
+	//           , []() { std::cout << "amazing!\n"; }
+	//           , []() { std::cout << "amazing!\n"; }
+	//           , []() { std::cout << "amazing!\n"; }
+	//           , []() { std::cout << "amazing!\n"; }
+	//           , []() { std::cout << "amazing!\n"; }
+	//           , []() { return 69; }
+	//           , as::bind( ex2, []() { std::cout << "fucking amazing!\n"; } )
+	//           , std::bind( [](int i) { std::cout << "recv: " << i << "\n"; }, std::placeholders::_1 )
+	//         );
 
 	clock::time_point start = clock::now();
 	{
 		ex.Run();
 	}
   clock::duration elapsed = clock::now() - start;
+
+  ex2.Shutdown();
 
   std::cout << "time per switch: ";
   clock::duration per_iteration = elapsed / iterations / chains;
