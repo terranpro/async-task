@@ -315,8 +315,14 @@ private:
 	{
 		Context ctx(this);
 
-		while( !quit_requested || !task_queue.Empty() )
+		for( std::unique_lock<std::mutex> lock(task_mut);
+		     ctx.StealWork() || !ctx.priv_task_queue.Empty();
+		     lock.lock() )
+		{
+			lock.unlock();
+
 			DoIteration( &ctx );
+		}
 	}
 
 	bool DoIteration(Context *ctx)
