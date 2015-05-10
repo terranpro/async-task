@@ -17,6 +17,23 @@
 #include <memory>
 #include <functional>
 #include <tuple>
+#include <iostream>
+
+template<class T>
+void print_type()
+{
+	std::cout << typeid(T).name() << "\n";
+}
+
+void print_stuff()
+{}
+
+template<class T, class... Args>
+void print_stuff(T t, Args... args)
+{
+	std::cout << typeid(T).name() << ": " << t << "\n";
+	print_stuff( args... );
+}
 
 namespace as {
 
@@ -116,9 +133,10 @@ template<class Exec, class Func>
 struct PostTask
 {
 	typedef Exec executor_type;
+	//typedef typename convert_functor<Func>::type function_type;
 	typedef Func function_type;
 
-	Func func;
+	function_type func;
 	Exec *executor;
 
 	template<class F>
@@ -164,10 +182,42 @@ void schedule(Ex&& ex, Func&& f)
 }
 
 template<class Func, class... A>
-auto invoke(Func&& f, A&&... args)
+auto invoke_impl(std::true_type, Func&& f, A&&... args)
 	-> decltype( std::forward<Func>(f)( std::forward<A>(args)... ) )
 {
+	print_stuff(args...);
+	print_type<Func>();
+	std::cout << "Func: " << &f << "\n\n\n";
+
 	return std::forward<Func>(f)( std::forward<A>(args)... );
+}
+
+template<class Func, class... A>
+auto invoke_impl(std::false_type, Func&& f, A&&... args)
+	-> decltype( std::forward<Func>(f)() )
+{
+	print_stuff(args...);
+	print_type<Func>();
+	std::cout << "Func: " << &f << "\n";
+
+	return std::forward<Func>(f)();
+}
+
+template<class Func, class... Args>
+auto invoke(Func&& f, Args&&... args)
+	-> decltype( invoke_impl( typename IsCallableWith<
+	                          typename std::remove_reference<Func>::type,
+	                          Args...
+	                          >::type{},
+	                          std::forward<Func>(f),
+	                          std::forward<Args>(args)... ) )
+{
+	return invoke_impl( typename IsCallableWith<
+	                    typename std::remove_reference<Func>::type,
+	                    Args...
+	                    >::type{},
+	                    std::forward<Func>(f),
+	                    std::forward<Args>(args)... );
 }
 
 template<class Func, class ArgTuple, size_t... Ids>
@@ -198,7 +248,8 @@ template<class Func, class Next, class... Args>
 void chain_invoke_impl( Func&& f, Next&& n, std::true_type, Args&&... args )
 	// -> decltype( std::forward<Next>(n)( std::forward<Func>(f)( std::forward<Args>(args)... ) ) )
 {
-	std::forward<Next>(n)( std::forward<Func>(f)( std::forward<Args>(args)... ) );
+	//std::forward<Next>(n)( std::forward<Func>(f)( std::forward<Args>(args)... ) );
+	invoke( std::forward<Next>(n), invoke( std::forward<Func>(f), std::forward<Args>(args)... ) );
 }
 
 template<class Func, class Next, class... Args>
@@ -366,6 +417,8 @@ public:
 	template<class... Args>
 	void invoke(Args&&... args)
 	{
+		assert( false );
+
 		chain_invoke( inv, next, std::forward<Args>(args)... );
 	}
 
@@ -374,7 +427,7 @@ public:
 	{
 		auto x = std::bind( [=](Args... a)
 		                    {
-			                    chain_invoke(inv, next, std::move(a)... );
+			                    chain_invoke(inv, next, a... );
 		                    },
 		                    std::forward<Args>(args)... );
 
@@ -431,6 +484,8 @@ struct chain_invocation<Ex, bound_invocation<FirstEx,First>>
 	template<class... Args>
 	void invoke(Args&&... args)
 	{
+		assert( false );
+
 		inv.invoke( std::forward<Args>(args)... );
 	}
 
@@ -439,7 +494,7 @@ struct chain_invocation<Ex, bound_invocation<FirstEx,First>>
 	{
 		auto x = std::bind( [=](Args... a)
 		                    {
-			                    ::as::invoke(inv, std::move(a)... );
+			                    ::as::invoke(inv, a... );
 		                    },
 		                    std::forward<Args>(args)... );
 

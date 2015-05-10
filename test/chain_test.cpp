@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
 	as::post( ex, f, as::bind( ex2, print, std::placeholders::_1 ) );
 
 	as::post( ex,
-	          f, g, h,
+	          f, //g, h, f, g, h,
 	          as::bind( ex2, print, std::placeholders::_1 )
 	        );
 
