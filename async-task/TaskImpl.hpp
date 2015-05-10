@@ -415,6 +415,44 @@ struct chain_invocation<Ex, First>
 	}
 };
 
+template<class Ex, class FirstEx, class First>
+struct chain_invocation<Ex, bound_invocation<FirstEx,First>>
+{
+	typedef typename bound_invocation<FirstEx,First>::executor_type executor_type;
+
+	invocation<First> inv;
+	executor_type ex;
+
+	explicit chain_invocation(Ex ex, bound_invocation<FirstEx,First> i1)
+		: inv(std::move(i1.inv))
+		, ex(std::move(i1.ex))
+	{}
+
+	template<class... Args>
+	void invoke(Args&&... args)
+	{
+		inv.invoke( std::forward<Args>(args)... );
+	}
+
+	template<class... Args>
+	void schedule(Args&&... args)
+	{
+		auto x = std::bind( [=](Args... a)
+		                    {
+			                    ::as::invoke(inv, std::move(a)... );
+		                    },
+		                    std::forward<Args>(args)... );
+
+		::as::schedule( ex, PostTask<Ex, decltype(x)>( &ex, std::move(x) ) );
+	}
+
+	template<class... Args>
+	void operator()(Args&&... args)
+	{
+		this->schedule( std::forward<Args>(args)... );
+	}
+};
+
 template<class Ex, class Func, class... Conts>
 auto build_chain(Ex& ex, Func&& func, Conts&&... conts)
 	-> chain_invocation<Ex, Func, Conts...>
