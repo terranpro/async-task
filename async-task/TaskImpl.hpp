@@ -195,37 +195,37 @@ auto tuple_invoke(Func&& f, ArgTuple&& arg_tuple)
 
 
 template<class Func, class Next, class... Args>
-auto chain_invoke_impl( Func&& f, Next&& n, std::true_type, Args&&... args )
-	-> decltype( std::forward<Next>(n)( std::forward<Func>(f)( std::forward<Args>(args)... ) ) )
+void chain_invoke_impl( Func&& f, Next&& n, std::true_type, Args&&... args )
+	// -> decltype( std::forward<Next>(n)( std::forward<Func>(f)( std::forward<Args>(args)... ) ) )
 {
-	return std::forward<Next>(n)( std::forward<Func>(f)( std::forward<Args>(args)... ) );
+	std::forward<Next>(n)( std::forward<Func>(f)( std::forward<Args>(args)... ) );
 }
 
 template<class Func, class Next, class... Args>
-auto chain_invoke_impl( Func&& f, Next&& n, std::false_type, Args&&... args )
-	-> decltype( invoke( std::forward<Next>(n) ) )
+void chain_invoke_impl( Func&& f, Next&& n, std::false_type, Args&&... args )
+	// -> decltype( invoke( std::forward<Next>(n) ) )
 {
 	invoke( std::forward<Func>(f), std::forward<Args>(args)... );
-	return invoke( std::forward<Next>(n) );
+	invoke( std::forward<Next>(n) );
 }
 
 template<class Func, class Next, class... Args>
-auto chain_invoke( Func&& f, Next&& n, Args&&... args )
-	-> decltype( chain_invoke_impl( std::forward<Func>(f),
-	                                std::forward<Next>(n),
-	                                typename IsCallableWith<
-	                                typename std::remove_reference<Next>::type,
-	                                decltype( std::declval<Func>()( std::declval<Args>()... ) )
-	                                >::type{},
-	                                std::forward<Args>(args)... ) )
+void chain_invoke( Func&& f, Next&& n, Args&&... args )
+	// -> decltype( chain_invoke_impl( std::forward<Func>(f),
+	//                                 std::forward<Next>(n),
+	//                                 typename IsCallableWith<
+	//                                 typename std::remove_reference<Next>::type,
+	//                                 decltype( std::declval<Func>()( std::declval<Args>()... ) )
+	//                                 >::type{},
+	//                                 std::forward<Args>(args)... ) )
 {
-	return chain_invoke_impl( std::forward<Func>(f),
-	                          std::forward<Next>(n),
-	                          typename IsCallableWith<
-	                          typename std::remove_reference<Next>::type,
-	                          decltype( std::declval<Func>()( std::declval<Args>()... ) )
-	                          >::type{},
-	                          std::forward<Args>(args)... );
+	chain_invoke_impl( std::forward<Func>(f),
+	                   std::forward<Next>(n),
+	                   typename IsCallableWith<
+	                   typename std::remove_reference<Next>::type,
+	                   decltype( std::declval<Func>()( std::declval<Args>()... ) )
+	                   >::type{},
+	                   std::forward<Args>(args)... );
 }
 
 template<class Func>
@@ -333,17 +333,15 @@ struct chain_invocation<Ex, First, Invokers...>
 
 public:
 	template<class... Args>
-	auto invoke(Args&&... args)
-		-> decltype( chain_invoke( inv, std::declval<base_type>(), std::forward<Args>(args)... ) )
+	void invoke(Args&&... args)
 	{
-		return chain_invoke( inv, next, std::forward<Args>(args)... );
+		chain_invoke( inv, next, std::forward<Args>(args)... );
 	}
 
 	template<class... Args>
-	auto operator()(Args&&... args)
-		-> decltype( this->invoke( std::forward<Args>(args)... ) )
+	void operator()(Args&&... args)
 	{
-		return this->invoke( std::forward<Args>(args)... );
+		this->invoke( std::forward<Args>(args)... );
 	}
 };
 
@@ -366,10 +364,9 @@ struct chain_invocation<Ex, bound_invocation<FirstEx,First>, Invokers...>
 
 public:
 	template<class... Args>
-	auto invoke(Args&&... args)
-		-> decltype( chain_invoke( inv, std::declval<base_type>(), std::forward<Args>(args)... ) )
+	void invoke(Args&&... args)
 	{
-		return chain_invoke( inv, next, std::forward<Args>(args)... );
+		chain_invoke( inv, next, std::forward<Args>(args)... );
 	}
 
 	template<class... Args>
@@ -377,18 +374,17 @@ public:
 	{
 		auto x = std::bind( [=](Args... a)
 		                    {
-			                    return chain_invoke(inv, next, std::move(a)... );
+			                    chain_invoke(inv, next, std::move(a)... );
 		                    },
 		                    std::forward<Args>(args)... );
 
 		::as::schedule( ex, PostTask<Ex, decltype(x)>( &ex, std::move(x) ) );
-
 	}
 
 	template<class... Args>
 	void operator()(Args&&... args)
 	{
-		return this->schedule( std::forward<Args>(args)... );
+		this->schedule( std::forward<Args>(args)... );
 	}
 };
 
@@ -407,17 +403,15 @@ struct chain_invocation<Ex, First>
 	{}
 
 	template<class... Args>
-	auto invoke(Args&&... args)
-		-> decltype( inv.invoke( std::forward<Args>(args)... ) )
+	void invoke(Args&&... args)
 	{
-		return inv.invoke( std::forward<Args>(args)... );
+		inv.invoke( std::forward<Args>(args)... );
 	}
 
 	template<class... Args>
-	auto operator()(Args&&... args)
-		-> decltype( this->invoke( std::forward<Args>(args)... ) )
+	void operator()(Args&&... args)
 	{
-		return this->invoke( std::forward<Args>(args)... );
+		this->invoke( std::forward<Args>(args)... );
 	}
 };
 

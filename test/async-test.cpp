@@ -619,14 +619,11 @@ void post_test()
 
 	as::ThreadExecutor ex( "testing" );
 
-	as::ThreadExecutor ex2;
-
 	for( int i = 0; i < chains; ++i )
-		as::post( ex, std::bind(post_chain, ex, 0 ) );
+		as::post( ex, [&]() { post_chain(ex, 0); } );
 
 	as::post( ex, []() { return foo(99); }
  , [](foo i) { std::cout << i << " \n"; }
-	          , as::bind( ex2, []() { std::cout << "fucking amazing!\n"; } )
 , []() {}
 	        );
 
@@ -648,8 +645,6 @@ void post_test()
 		ex.Run();
 	}
   clock::duration elapsed = clock::now() - start;
-
-  ex2.Shutdown();
 
   std::cout << "time per switch: ";
   clock::duration per_iteration = elapsed / iterations / chains;
