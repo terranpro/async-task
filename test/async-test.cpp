@@ -625,7 +625,7 @@ void post_test()
 		as::post( ex, std::bind(post_chain, ex, 0 ) );
 
 	as::post( ex, []() { return foo(99); }
-// , [](foo i) { std::cout << i << " \n"; }
+ , [](foo i) { std::cout << i << " \n"; }
 	          , as::bind( ex2, []() { std::cout << "fucking amazing!\n"; } )
 , []() {}
 	        );

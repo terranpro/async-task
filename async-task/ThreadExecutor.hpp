@@ -316,7 +316,7 @@ private:
 		Context ctx(this);
 
 		for( std::unique_lock<std::mutex> lock(task_mut);
-		     ctx.StealWork() || !ctx.priv_task_queue.Empty();
+		     !quit_requested || ctx.StealWork() || !ctx.priv_task_queue.Empty();
 		     lock.lock() )
 		{
 			lock.unlock();
