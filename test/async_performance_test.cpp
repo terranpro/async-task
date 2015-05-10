@@ -607,83 +607,12 @@ void function_context_switch_test()
   std::cout << "time per switch: ";
   clock::duration per_iteration = elapsed / iterations / chains;
   std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(per_iteration).count() << " ns\n";
-  std::cout << "switches per second: ";
-  std::cout << (std::chrono::seconds(1) / per_iteration) << "\n";
+
+  if ( per_iteration.count() != 0 ) {
+	  std::cout << "switches per second: ";
+	  std::cout << (std::chrono::seconds(1) / per_iteration) << "\n";
+  }
 }
-
-void post_test()
-{
-	const int chains = 4;
-
-	using clock = std::chrono::high_resolution_clock;
-
-	as::ThreadExecutor ex( "testing" );
-
-	for( int i = 0; i < chains; ++i )
-		as::post( ex, [&]() { post_chain(ex, 0); } );
-
-	as::post( ex, []() { return foo(99); }
- , [](foo i) { std::cout << i << " \n"; }
-, []() {}
-	        );
-
-	// as::post( ex,
-	//           []() { return 99; }
-	//           , [](int&& x) { std::cout << x << "finished\n"; }
-	//           , []() { std::cout << "amazing!\n"; }
-	//           , []() { std::cout << "amazing!\n"; }
-	//           , []() { std::cout << "amazing!\n"; }
-	//           , []() { std::cout << "amazing!\n"; }
-	//           , []() { std::cout << "amazing!\n"; }
-	//           , []() { return 69; }
-	//           , as::bind( ex2, []() { std::cout << "fucking amazing!\n"; } )
-	//           , std::bind( [](int i) { std::cout << "recv: " << i << "\n"; }, std::placeholders::_1 )
-	//         );
-
-	clock::time_point start = clock::now();
-	{
-		ex.Run();
-	}
-  clock::duration elapsed = clock::now() - start;
-
-  std::cout << "time per switch: ";
-  clock::duration per_iteration = elapsed / iterations / chains;
-  std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(per_iteration).count() << " ns\n";
-  std::cout << "switches per second: ";
-  std::cout << (std::chrono::seconds(1) / per_iteration) << "\n";
-}
-
-// std::atomic<int> function_count(0);
-
-// void function1()
-// {
-//   ++function_count;
-// }
-
-// void thread_work_test()
-// {
-// 	auto invoker = as::PostInvoker<as::ThreadExecutor>( function1 );
-// 	as::ThreadWork *work = new as::ThreadWorkImpl< decltype(invoker) >( std::move(invoker) );
-
-// 	const int chains = 4;
-
-// 	function_count = 0;
-
-// 	using clock = std::chrono::high_resolution_clock;
-// 	clock::time_point start = clock::now();
-// 	{
-// 		for( int c = 0; c < chains; ++c )
-// 			for( int i = 0; i < iterations; ++i )
-// 				(*work)();
-// 	}
-//   clock::duration elapsed = clock::now() - start;
-
-//   std::cout << "time per switch: ";
-//   clock::duration per_iteration = elapsed / iterations / chains;
-//   std::cout << std::chrono::duration_cast<std::chrono::nanoseconds>(per_iteration).count() << " ns\n";
-
-//   assert( function_count == iterations * chains );
-// }
 
 int main(int argc, char *argv[])
 {
@@ -709,11 +638,7 @@ int main(int argc, char *argv[])
 
 	function_context_switch_test();
 
-	post_test();
-
 	// invoker_test();
-
-	// thread_work_test();
 
 	return 0;
 }

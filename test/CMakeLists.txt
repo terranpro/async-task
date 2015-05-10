@@ -1,17 +1,22 @@
-ADD_EXECUTABLE(async-test
-  async-test.cpp
-  )
-
-IF( CMAKE_ASYNC_COROUTINES )
-  ADD_DEFINITIONS(-DAS_USE_COROUTINE_TASKS)
-  TARGET_LINK_LIBRARIES( async-test
-    boost_context
-    )
-ENDIF()
-
 SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_DEBUG_CXX_FLAGS} -O2 -rdynamic -gdwarf-2")
 
-TARGET_LINK_LIBRARIES( async-test
-  #  ${pkg-glib_LIBRARIES}
-  -pthread
-  )
+function(CreateTest source_file)
+
+  get_filename_component( exec_name ${source_file} NAME_WE )
+
+  message( "Generating Test: ${exec_name}" )
+
+  ADD_EXECUTABLE( ${exec_name}
+    ${source_file}
+    )
+
+  TARGET_LINK_LIBRARIES( ${exec_name}
+    #  ${pkg-glib_LIBRARIES}
+    -pthread
+    )
+
+endfunction()
+
+CreateTest( async_performance_test.cpp )
+CreateTest( post_performance_test.cpp )
+CreateTest( thread_work_performance_test.cpp )
