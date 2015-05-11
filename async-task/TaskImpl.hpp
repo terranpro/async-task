@@ -133,8 +133,8 @@ template<class Exec, class Func>
 struct PostTask
 {
 	typedef Exec executor_type;
-	//typedef typename convert_functor<Func>::type function_type;
-	typedef Func function_type;
+	typedef typename convert_functor<Func>::type function_type;
+	// typedef Func function_type;
 
 	function_type func;
 	Exec *executor;
@@ -185,9 +185,7 @@ template<class Func, class... A>
 auto invoke_impl(std::true_type, Func&& f, A&&... args)
 	-> decltype( std::forward<Func>(f)( std::forward<A>(args)... ) )
 {
-	print_stuff(args...);
-	print_type<Func>();
-	std::cout << "Func: " << &f << "\n\n\n";
+	std::cout << __PRETTY_FUNCTION__ << " Func: " << &f << "\n\n\n";
 
 	return std::forward<Func>(f)( std::forward<A>(args)... );
 }
@@ -286,10 +284,11 @@ struct invocation
 
 	func_type func;
 
-	template<class F>
-	explicit invocation(F&& f)
-		: func( std::forward<F>(f) )
-	{}
+	explicit invocation(func_type&& f)
+		: func( std::move(f) )
+	{
+		std::cout << __PRETTY_FUNCTION__ << "\n";
+	}
 
 	invocation(invocation const&) = default;
 	invocation(invocation&&) = default;
@@ -425,13 +424,11 @@ public:
 	template<class... Args>
 	void schedule(Args&&... args)
 	{
-		auto x = std::bind( [=](Args... a)
-		                    {
-			                    chain_invoke(inv, next, a... );
-		                    },
-		                    std::forward<Args>(args)... );
+		auto x = std::bind( [](invocation<First> inv, base_type next, Args... a) {
+				chain_invoke(inv, next, std::move(a)...);
+			}, inv, next, std::forward<Args>(args)... );
 
-		::as::schedule( ex, PostTask<Ex, decltype(x)>( &ex, std::move(x) ) );
+		::as::schedule( ex, PostTask<Ex, decltype(x)>( &ex, x ) );
 	}
 
 	template<class... Args>
@@ -492,11 +489,9 @@ struct chain_invocation<Ex, bound_invocation<FirstEx,First>>
 	template<class... Args>
 	void schedule(Args&&... args)
 	{
-		auto x = std::bind( [=](Args... a)
-		                    {
-			                    ::as::invoke(inv, a... );
-		                    },
-		                    std::forward<Args>(args)... );
+		auto x = std::bind( [](invocation<First> inv, Args... a) {
+				::as::invoke( inv, std::move(a)... );
+			}, inv, std::forward<Args>(args)... );
 
 		::as::schedule( ex, PostTask<Ex, decltype(x)>( &ex, std::move(x) ) );
 	}
