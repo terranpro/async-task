@@ -352,6 +352,13 @@ struct bound_invocation
 		: ex( std::forward<E>(e) )
 		, inv( std::forward<F>(func) )
 	{}
+
+	template<class... Args>
+	auto operator()(Args&&... args)
+		-> decltype( ::as::invoke( inv, std::forward<Args>(args)... ) )
+	{
+		return ::as::invoke( inv, std::forward<Args>(args)... );
+	}
 };
 
 template<class Ex, class Func, class... Args>

@@ -28,6 +28,8 @@ struct foo
 		return 22;
 	}
 
+	int z(int, int, char) const {}
+
 	int operator()() const {
 		return y();
 	}
@@ -82,6 +84,10 @@ int main(int argc, char *argv[])
 	static_assert( check_multi_result<int>(f,g,h), "" );
 	static_assert( check_multi_result<int>(f,g,i,f), "" );
 
+	std::cout << check_callable( std::bind(&foo::z, foo(), 1, 2, 3) ) << "\n";
+
+	std::cout << check_multi_result<void>( std::bind(&foo::z, foo(), 1, 2, 3) ) << "\n";
+	std::cout << check_multi_result<int>( std::bind(&foo::z, foo(), 1, 2, 3) ) << "\n";
 
 	return 0;
 }
