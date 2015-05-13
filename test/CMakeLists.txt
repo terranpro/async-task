@@ -1,4 +1,4 @@
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_DEBUG_CXX_FLAGS} -O2 -rdynamic -gdwarf-2")
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_DEBUG_CXX_FLAGS} -O2 -rdynamic -gdwarf-2 -ftemplate-backtrace-limit=0")
 
 function(CreateTest source_file)
 
