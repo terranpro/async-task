@@ -37,8 +37,6 @@ void post(Ex& ex, Func&& func, Args&&... args)
 
 	// auto c = ib::build( std::forward<Func>(func), std::forward<Args>(args)... );
 
-	std::cout << typeid( typename ChainResultOf<std::tuple<void>, Func, Args... >::type ).name() << "\n";
-
 	auto c = build_chain( ex, std::forward<Func>(func), std::forward<Args>(args)... );
 
 	schedule( ex, PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );

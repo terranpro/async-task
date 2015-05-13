@@ -17,23 +17,6 @@
 #include <memory>
 #include <functional>
 #include <tuple>
-#include <iostream>
-
-template<class T>
-void print_type()
-{
-	std::cout << typeid(T).name() << "\n";
-}
-
-void print_stuff()
-{}
-
-template<class T, class... Args>
-void print_stuff(T t, Args... args)
-{
-	std::cout << typeid(T).name() << ": " << t << "\n";
-	print_stuff( args... );
-}
 
 namespace as {
 
@@ -185,8 +168,6 @@ template<class Func, class... A>
 auto invoke_impl(std::true_type, Func&& f, A&&... args)
 	-> decltype( std::forward<Func>(f)( std::forward<A>(args)... ) )
 {
-	std::cout << __PRETTY_FUNCTION__ << " Func: " << &f << "\n\n\n";
-
 	return std::forward<Func>(f)( std::forward<A>(args)... );
 }
 
@@ -194,10 +175,6 @@ template<class Func, class... A>
 auto invoke_impl(std::false_type, Func&& f, A&&... args)
 	-> decltype( std::forward<Func>(f)() )
 {
-	print_stuff(args...);
-	print_type<Func>();
-	std::cout << "Func: " << &f << "\n";
-
 	return std::forward<Func>(f)();
 }
 
