@@ -284,11 +284,12 @@ struct invocation
 
 	func_type func;
 
-	explicit invocation(func_type&& f)
-		: func( std::move(f) )
-	{
-		std::cout << __PRETTY_FUNCTION__ << "\n";
-	}
+	template<class F, class Enable =
+	         typename std::enable_if< !std::is_same<invocation<Func>, typename std::decay<F>::type>::value
+	                                >::type>
+	explicit invocation(F&& f)
+		: func( std::forward<F>(f) )
+	{}
 
 	invocation(invocation const&) = default;
 	invocation(invocation&&) = default;

@@ -614,6 +614,24 @@ void function_context_switch_test()
   }
 }
 
+void async_result_test()
+{
+	auto i = []() {
+		return 42;
+	};
+	auto j = [](int) {
+		return 43;
+	};
+	auto k = [](int) {
+		return 45.0;
+	};
+
+	as::ThreadExecutor ex("testing");
+
+	auto r1 = as::async( ex, i, j, k );
+	std::cout << typeid( r1 ).name() << "\n";
+}
+
 int main(int argc, char *argv[])
 {
 	// foo_test();
@@ -637,6 +655,8 @@ int main(int argc, char *argv[])
 	// sync_test();
 
 	function_context_switch_test();
+
+	async_result_test();
 
 	// invoker_test();
 

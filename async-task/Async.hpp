@@ -37,6 +37,8 @@ void post(Ex& ex, Func&& func, Args&&... args)
 
 	// auto c = ib::build( std::forward<Func>(func), std::forward<Args>(args)... );
 
+	std::cout << typeid( typename ChainResultOf<std::tuple<void>, Func, Args... >::type ).name() << "\n";
+
 	auto c = build_chain( ex, std::forward<Func>(func), std::forward<Args>(args)... );
 
 	schedule( ex, PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
@@ -44,17 +46,22 @@ void post(Ex& ex, Func&& func, Args&&... args)
 }
 
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext
-template<class Ex, class Func, class... Args>
-TaskFuture< void >
-async(Ex& ex, Func&& func)
+template<class Ex, class Func>
+auto async(Ex& ex, Func&& func)
+	-> TaskFuture< typename ChainResultOf<std::tuple<>, typename std::remove_reference<Func>::type >::type >
 {
 	schedule( ex, PostTask<Ex,Func>( &ex, std::forward<Func>(func) ) );
+	return {};
 }
 
 template<class Ex, class Func, class... Args>
-TaskFuture< void >
-async(Ex& ex, Func&& func, Args&&... args)
+auto async(Ex& ex, Func&& func, Args&&... args)
+	-> TaskFuture< typename ChainResultOf<std::tuple<>,
+	                                      typename std::remove_reference<Func>::type,
+	                                      typename std::remove_reference<Args>::type... >::type >
 {
+	//std::cout << typeid( typename ChainResultOf<std::tuple<>, Func, Args... >::type ).name() << "\n";
+
 	auto c = build_chain( ex, std::forward<Func>(func), std::forward<Args>(args)... );
 
 	schedule( ex, PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
@@ -63,16 +70,16 @@ async(Ex& ex, Func&& func, Args&&... args)
 }
 
 /// Dispatch a callback in a new thread context
-template<class Func, class... Args>
-TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
-async(Func&& func, Args&&... args)
-{
-	ThreadExecutor c;
+// template<class Func, class... Args>
+// TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
+// async(Func&& func, Args&&... args)
+// {
+// 	ThreadExecutor c;
 
-	return async( c,
-	              std::forward<Func>(func),
-	              std::forward<Args>(args)... );
-}
+// 	return async( c,
+// 	              std::forward<Func>(func),
+// 	              std::forward<Args>(args)... );
+// }
 
 } // namespace as
 
