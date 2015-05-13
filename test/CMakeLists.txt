@@ -21,4 +21,4 @@ CreateTest( async_performance_test.cpp )
 CreateTest( post_performance_test.cpp )
 CreateTest( thread_work_performance_test.cpp )
 CreateTest( chain_test.cpp )
-
+CreateTest( traits_test.cpp )

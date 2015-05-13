@@ -276,6 +276,38 @@ struct HasArg<T, typename std::enable_if< IsCallable<T>::value >::type >
 	: HasArgHelper<T>
 {};
 
+template<class Signature>
+struct ResultOf;
+
+template<class R, class... Args>
+struct ResultOf<R(Args...)>
+{
+	typedef R type;
+};
+
+template<class ArgTuple, class T, class Enable = void>
+struct CallableResult
+	: ResultOf< typename FunctionSignature<T>::type >
+{};
+
+template<class T, class... Args>
+struct CallableResult< std::tuple<Args...>, T,
+                       typename std::enable_if< IsCallableWith<T, Args...>::value >::type >
+{
+	typedef decltype( std::declval<T>()( std::declval<Args>()... ) ) type;
+};
+
+template<class ArgTuple, class T, class... Ts>
+struct ChainResultOf
+	: ChainResultOf< std::tuple< typename CallableResult< ArgTuple, T >::type >,
+	                 Ts... >
+{};
+
+template<class ArgTuple, class T>
+struct ChainResultOf<ArgTuple, T>
+	: CallableResult<ArgTuple, T>
+{};
+
 // Split a list of types into tuple of callables and a tuple of args
 template< template<class> class Pred, class... Args>
 struct SplitBy;
