@@ -414,14 +414,6 @@ struct chain_invocation<Ex, bound_invocation<FirstEx,First>, Invokers...>
 
 public:
 	template<class... Args>
-	void invoke(Args&&... args)
-	{
-		assert( false );
-
-		chain_invoke( inv, next, std::forward<Args>(args)... );
-	}
-
-	template<class... Args>
 	void schedule(Args&&... args)
 	{
 		auto x = std::bind( [](invocation<First> inv, base_type next, Args... a) {
@@ -477,14 +469,6 @@ struct chain_invocation<Ex, bound_invocation<FirstEx,First>>
 		: inv(std::move(i1.inv))
 		, ex(std::move(i1.ex))
 	{}
-
-	template<class... Args>
-	void invoke(Args&&... args)
-	{
-		assert( false );
-
-		inv.invoke( std::forward<Args>(args)... );
-	}
 
 	template<class... Args>
 	void schedule(Args&&... args)
