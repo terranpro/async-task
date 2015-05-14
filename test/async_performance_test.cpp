@@ -564,8 +564,7 @@ void sync_test()
 
 */
 
-const unsigned int iterations = 1000000;
-//const unsigned int iterations = 100;
+unsigned int iterations = 1000000;
 
 void chain(as::ThreadExecutor& ex, unsigned int i)
 {
@@ -626,14 +625,22 @@ void async_result_test()
 		return 45.0;
 	};
 
-	as::ThreadExecutor ex("testing");
+
+	as::ThreadExecutor ex;//("testing");
 
 	auto r1 = as::async( ex, i, j, k );
 	std::cout << typeid( r1 ).name() << "\n";
+
+	// ex.Run();
+
+	std::cout << "result: " << r1.get() << "\n";
 }
 
 int main(int argc, char *argv[])
 {
+	if ( argv[1] )
+		iterations = std::stoi(argv[1]);
+
 	// foo_test();
 
 	// coro_test();

@@ -37,24 +37,35 @@ void post(Ex& ex, Func&& func, Args&&... args)
 	schedule( ex, PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
 }
 
-/// Dispatch a callback in a thread context, i.e. an ExecutionContext
-
 template<class R>
-std::function<void(R)>
-create_async_functor(std::shared_ptr<AsyncResult<R>> ar, std::false_type)
+struct async_result_invocation
 {
-	return [ar](R r) {
-		ar->set( std::move(r) );
-	       };
-}
+	std::shared_ptr<AsyncResult<R>> ar;
 
-std::function<void()>
-create_async_functor(std::shared_ptr<AsyncResult<void>> ar, std::true_type)
+	async_result_invocation(std::shared_ptr<AsyncResult<R>>& ar)
+		: ar(ar)
+	{}
+
+	void operator()( R r )
+	{
+		ar->set( std::move(r) );
+	}
+};
+
+template<>
+struct async_result_invocation<void>
 {
-	return [ar]() {
+	std::shared_ptr<AsyncResult<void>> ar;
+
+	async_result_invocation(std::shared_ptr<AsyncResult<void>>& ar)
+		: ar(ar)
+	{}
+
+	void operator()()
+	{
 		ar->set();
-	       };
-}
+	}
+};
 
 template<class Ex, class Func>
 auto async(Ex& ex, Func&& func)
@@ -68,7 +79,7 @@ auto async(Ex& ex, Func&& func)
 
 	auto c = build_chain( ex,
 	                      std::forward<Func>(func),
-	                      create_async_functor(r, typename std::is_void<result_type>::type{} )
+	                      async_result_invocation<result_type>(r)
 	                    );
 
 	schedule( ex, AsyncTask<result_type, Ex,decltype(c)>( &ex, std::move(c), r ) );
@@ -91,9 +102,7 @@ auto async(Ex& ex, Func&& func, Args&&... args)
 	auto c = build_chain( ex,
 	                      std::forward<Func>(func),
 	                      std::forward<Args>(args)...,
-	                      [r](result_type haha) {
-		                      r->set(haha);
-	                      }
+	                      async_result_invocation<result_type>(r)
 	                    );
 
 	schedule( ex, AsyncTask<result_type, Ex,decltype(c)>( &ex, std::move(c), r ) );
