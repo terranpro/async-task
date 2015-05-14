@@ -24,6 +24,10 @@ struct Registry
 	~Registry()
 	{
 		registry->erase( ex );
+		if ( registry->empty() ) {
+			delete registry;
+			registry = nullptr;
+		}
 	}
 
 	static Context *Current(Executor const *ex)
