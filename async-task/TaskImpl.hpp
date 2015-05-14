@@ -142,7 +142,7 @@ struct PostTask
 	{}
 };
 
-template<class Exec, class Func>
+template<class Ret, class Exec, class Func>
 struct AsyncTask
 {
 	typedef Exec executor_type;
@@ -150,12 +150,20 @@ struct AsyncTask
 
 	Func func;
 	Exec *executor;
+	std::shared_ptr<AsyncResult<Ret>> result;
 
-	AsyncTask(Exec *ex, Func func)
+	AsyncTask(Exec *ex, Func func, std::shared_ptr<AsyncResult<Ret>> r)
 		: func( std::move(func) )
 		, executor(ex)
+		, result(r)
 	{}
 
+	TaskStatus Invoke()
+	{
+		func();
+
+		return TaskStatus::Finished;
+	}
 };
 
 template<class Ex, class Func>

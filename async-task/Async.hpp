@@ -32,24 +32,48 @@ void post(Ex& ex, Func&& func)
 template<class Ex, class Func, class... Args>
 void post(Ex& ex, Func&& func, Args&&... args)
 {
-	// using sc = SplitBy< IsCallable, Func, Args... >;
-	// using ib = invoker_builder< typename sc::true_types, typename sc::false_types >;
-
-	// auto c = ib::build( std::forward<Func>(func), std::forward<Args>(args)... );
-
 	auto c = build_chain( ex, std::forward<Func>(func), std::forward<Args>(args)... );
 
 	schedule( ex, PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
-	//ex.schedule( PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
 }
 
 /// Dispatch a callback in a thread context, i.e. an ExecutionContext
+
+template<class R>
+std::function<void(R)>
+create_async_functor(std::shared_ptr<AsyncResult<R>> ar, std::false_type)
+{
+	return [ar](R r) {
+		ar->set( std::move(r) );
+	       };
+}
+
+std::function<void()>
+create_async_functor(std::shared_ptr<AsyncResult<void>> ar, std::true_type)
+{
+	return [ar]() {
+		ar->set();
+	       };
+}
+
 template<class Ex, class Func>
 auto async(Ex& ex, Func&& func)
 	-> TaskFuture< typename ChainResultOf<std::tuple<>, typename std::remove_reference<Func>::type >::type >
 {
-	schedule( ex, PostTask<Ex,Func>( &ex, std::forward<Func>(func) ) );
-	return {};
+	using result_type = typename ChainResultOf<std::tuple<>,
+	                                           typename std::remove_reference<Func>::type
+	                                          >::type;
+
+	auto r = std::make_shared<AsyncResult<result_type>>();
+
+	auto c = build_chain( ex,
+	                      std::forward<Func>(func),
+	                      create_async_functor(r, typename std::is_void<result_type>::type{} )
+	                    );
+
+	schedule( ex, AsyncTask<result_type, Ex,decltype(c)>( &ex, std::move(c), r ) );
+
+	return TaskFuture<result_type>(std::move(r));
 }
 
 template<class Ex, class Func, class... Args>
@@ -58,13 +82,23 @@ auto async(Ex& ex, Func&& func, Args&&... args)
 	                                      typename std::remove_reference<Func>::type,
 	                                      typename std::remove_reference<Args>::type... >::type >
 {
-	//std::cout << typeid( typename ChainResultOf<std::tuple<>, Func, Args... >::type ).name() << "\n";
+	using result_type = typename ChainResultOf<std::tuple<>,
+	                                           typename std::remove_reference<Func>::type,
+	                                           typename std::remove_reference<Args>::type... >::type;
 
-	auto c = build_chain( ex, std::forward<Func>(func), std::forward<Args>(args)... );
+	auto r = std::make_shared<AsyncResult<result_type>>();
 
-	schedule( ex, PostTask<Ex,decltype(c)>( &ex, std::move(c) ) );
+	auto c = build_chain( ex,
+	                      std::forward<Func>(func),
+	                      std::forward<Args>(args)...,
+	                      [r](result_type haha) {
+		                      r->set(haha);
+	                      }
+	                    );
 
-	return {};
+	schedule( ex, AsyncTask<result_type, Ex,decltype(c)>( &ex, std::move(c), r ) );
+
+	return {std::move(r)};
 }
 
 /// Dispatch a callback in a new thread context

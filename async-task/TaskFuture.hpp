@@ -20,10 +20,19 @@ namespace as {
 template<class T>
 class TaskFuture
 {
+	std::shared_ptr< AsyncResult<T> > result;
 
 public:
 	TaskFuture() = default;
 
+	TaskFuture(std::shared_ptr<AsyncResult<T>> r)
+		: result(std::move(r))
+	{}
+
+	T get()
+	{
+		return result->get();
+	}
 };
 
 } // namespace as
