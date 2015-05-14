@@ -221,6 +221,7 @@ public:
 		, quit_requested(false)
 		, thr()
 	{
+		std::unique_lock<std::mutex> lock(task_mut);
 		thr = std::thread( &ThreadExecutorImpl::ThreadEntryPoint, this );
 	}
 
@@ -315,10 +316,16 @@ private:
 	{
 		Context ctx(this);
 
-		for( std::unique_lock<std::mutex> lock(task_mut);
-		     !quit_requested || ctx.StealWork() || !ctx.priv_task_queue.Empty();
-		     lock.lock() )
+		while( !quit_requested )
 		{
+			std::unique_lock<std::mutex> lock(task_mut);
+			cond.wait( lock,
+			           [&]() {
+				           return !ctx.priv_task_queue.Empty() || !task_queue.Empty() || quit_requested;
+			           } );
+
+			ctx.StealWork();
+
 			lock.unlock();
 
 			DoIteration( &ctx );
