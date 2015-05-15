@@ -294,8 +294,6 @@ public:
 			lock.unlock();
 
 			DoIteration( &ctx );
-
-			// DoProcessTasks( &ctx, lock );
 		}
 	}
 
@@ -444,6 +442,12 @@ public:
 	void Shutdown()
 	{
 		return impl->Shutdown();
+	}
+
+	static ThreadExecutor& GetDefault()
+	{
+		static ThreadExecutor tex;
+		return tex;
 	}
 
 public:
