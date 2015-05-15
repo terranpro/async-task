@@ -23,7 +23,7 @@ namespace as {
 
 namespace detail {
 
-static thread_local std::vector< TaskImplBase * > this_task_stack{};
+// static thread_local std::vector< TaskImplBase * > this_task_stack{};
 
 template< std::size_t Max, std::size_t Default, std::size_t Min >
 class simple_stack_allocator
@@ -188,21 +188,21 @@ struct BoostContext
 
 } // namespace v2
 
-
+template<class TaskFunc>
 class CoroutineTaskImpl
-	: public TaskImpl
 {
-
 	typedef detail::simple_stack_allocator<
 		MAX_STACK_SIZE,
 		DEFAULT_STACK_SIZE,
 		MIN_STACK_SIZE
-	                              > stack_allocator;
+	                                      > stack_allocator;
 
 	stack_allocator alloc;
 	std::size_t stack_size;
 	void *stack;
 	v2::BoostContext bctxt;
+	invocation<TaskFunc> taskfunc;
+	bool running;
 
 private:
 	void deinitialize_context()
@@ -216,7 +216,11 @@ private:
 	{
 		auto self = reinterpret_cast< CoroutineTaskImpl * >(p);
 
+		self->running = true;
+
 		self->on_entry();
+
+		self->running = false;
 
 		self->bctxt.Init( self->stack, self->stack_size );
 		self->bctxt.Exit();
@@ -224,29 +228,29 @@ private:
 
 	void on_entry()
 	{
-		if (taskfunc)
-			taskfunc->Run();
+		taskfunc();
 	}
 
 public:
 	CoroutineTaskImpl()
-		: TaskImpl(nullptr)
-		, alloc()
+		: alloc()
 		, stack_size( stack_allocator::default_stacksize() )
 		, stack( alloc.allocate( stack_size ) )
 		, bctxt( &CoroutineTaskImpl::entry_point,
 		         reinterpret_cast<intptr_t>(this) )
+		, running(false)
 	{
 		bctxt.Init( stack, stack_size );
 	}
 
-	CoroutineTaskImpl(std::unique_ptr<TaskFunctionBase> tfunc)
-		: TaskImpl( std::move(tfunc) )
-		, alloc()
+	CoroutineTaskImpl(typename invocation<TaskFunc>::func_type func)
+		: alloc()
 		, stack_size( stack_allocator::default_stacksize() )
 		, stack( alloc.allocate( stack_size ) )
 		, bctxt( &CoroutineTaskImpl::entry_point,
 		         reinterpret_cast<intptr_t>(this) )
+		, taskfunc( std::move(func) )
+		, running(false)
 	{
 		bctxt.Init( stack, stack_size );
 	}
@@ -257,29 +261,34 @@ public:
 	}
 
 public:
-	void Invoke()
+	TaskStatus Invoke()
 	{
-		detail::this_task_stack.insert( std::begin(detail::this_task_stack), this );
+		// detail::this_task_stack.insert( std::begin(detail::this_task_stack), this );
 
 		bctxt.Invoke();
 
-		detail::this_task_stack.erase( std::begin(detail::this_task_stack) );
+		// detail::this_task_stack.erase( std::begin(detail::this_task_stack) );
+
+		return running ? TaskStatus::Repeat : TaskStatus::Finished;
 	}
 
 	void Yield()
 	{
 		bctxt.Yield();
 	}
+
+	void Cancel()
+	{}
 };
 
 namespace this_task {
 
 inline void yield()
 {
-	if ( detail::this_task_stack.size() == 0 )
-		return;
+	// if ( detail::this_task_stack.size() == 0 )
+	// 	return;
 
-	detail::this_task_stack[0]->Yield();
+	// detail::this_task_stack[0]->Yield();
 }
 
 } // namespace as::ThisTask

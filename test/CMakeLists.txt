@@ -11,7 +11,10 @@ function(CreateTest source_file)
     )
 
   TARGET_LINK_LIBRARIES( ${exec_name}
-    #  ${pkg-glib_LIBRARIES}
+    # ${pkg-glib_LIBRARIES}
+    boost_system
+    boost_thread
+    boost_context
     -pthread
     )
 
@@ -22,3 +25,4 @@ CreateTest( post_performance_test.cpp )
 CreateTest( thread_work_performance_test.cpp )
 CreateTest( chain_test.cpp )
 CreateTest( traits_test.cpp )
+# CreateTest( await_test.cpp )

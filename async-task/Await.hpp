@@ -13,12 +13,13 @@
 
 #include "Async.hpp"
 #include "Executor.hpp"
+#include "CoroutineTaskImpl.hpp"
 
 namespace as {
 
 void await_schedule(Executor& context, Task task)
 {
-	context.Schedule(task);
+	context.Schedule( std::move(task) );
 
 	while( !task.IsFinished() ) {
 
@@ -38,14 +39,14 @@ template<class Func, class... Args>
 decltype( std::declval<Func>()(std::declval<Args>()...) )
 await(Executor& context, Func&& func, Args&&... args)
 {
-	auto timpl =  make_task<TaskImpl>( std::forward<Func>(func),
-	                                   std::forward<Args>(args)... );
+	auto bound = std::bind( std::forward<Func>(func), std::forward<Args>(args)... );
+	invocation<decltype(bound)> inv( std::move(bound) );
 
-	Task task{ timpl };
+	CoroutineTaskImpl< decltype(inv) > ct{ std::move(inv) };
 
-	await_schedule( context, task );
+	Task task{ true, std::move(ct) };
 
-	return timpl->GetControlBlock()->Get();
+	await_schedule( context, std::move(task) );
 }
 
 template<class Func, class... Args>
@@ -53,7 +54,7 @@ decltype( std::declval<Func>()(std::declval<Args>()...) )
 await(Func&& func, Args&&... args)
 {
 	//GlibExecutor ctxt;
-	ThreadExecutor ctxt;
+	auto ctxt = ThreadExecutor::GetDefault();
 
 	return await( ctxt,
 	              std::forward<Func>(func),
