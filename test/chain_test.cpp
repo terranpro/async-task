@@ -28,6 +28,8 @@ int main(int argc, char *argv[])
 	          as::bind( ex, print, std::placeholders::_1 )
 	        );
 
+	as::post( ex, f, g );
+
 	ex.Run();
 	ex2.Run();
 	ex.Run();

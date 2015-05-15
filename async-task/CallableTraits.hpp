@@ -285,17 +285,55 @@ struct ResultOf<R(Args...)>
 	typedef R type;
 };
 
+template<class...>
+struct VoidRemover;
+
+template<class... Ts>
+struct VoidRemover<std::tuple<Ts...>>
+{
+	typedef std::tuple<Ts...> type;
+};
+
+template<>
+struct VoidRemover<std::tuple<void>>
+{
+	typedef std::tuple<> type;
+};
+
+template<>
+struct VoidRemover<std::tuple<>>
+{
+	typedef std::tuple<> type;
+};
+
 template<class ArgTuple, class T, class Enable = void>
-struct CallableResult
-	: ResultOf< typename FunctionSignature<T>::type >
-{};
+struct CallableResultHelper;
+
+// template<class T>
+// struct CallableResultHelper<std::tuple<>, T,
+//                             typename void_type< typename FunctionSignature<T>::type >::type >
+// 	: ResultOf< typename FunctionSignature<T>::type >
+// {};
 
 template<class T, class... Args>
-struct CallableResult< std::tuple<Args...>, T,
-                       typename std::enable_if< IsCallableWith<T, Args...>::value >::type >
+struct CallableResultHelper< std::tuple<Args...>, T,
+                             typename std::enable_if< IsCallableWith<T, Args...>::value >::type >
 {
 	typedef decltype( std::declval<T>()( std::declval<Args>()... ) ) type;
 };
+
+template<class ArgTuple, class T>
+struct CallableResult
+	: CallableResultHelper< typename VoidRemover<ArgTuple>::type, T >
+{};
+
+// // TODO: take out this spec; try to handle void *better*
+// template<class T>
+// struct CallableResult< std::tuple<void>, T,
+//                        typename std::enable_if< IsCallableWith<T>::value >::type >
+// {
+// 	typedef decltype( std::declval<T>()() ) type;
+// };
 
 template<class ArgTuple, class T, class... Ts>
 struct ChainResultOf

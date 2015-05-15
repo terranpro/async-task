@@ -3,7 +3,7 @@
 #include <iostream>
 
 namespace {
-const unsigned iterations = 1000000;
+unsigned iterations = 1000000;
 }
 
 void post_chain(as::ThreadExecutor ex, unsigned int i)
@@ -42,6 +42,9 @@ void post_performance_test()
 
 int main(int argc, char *argv[])
 {
+	if ( argv[1] )
+		iterations = std::stoi(argv[1]);
+
 	post_performance_test();
 
 	return 0;

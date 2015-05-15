@@ -631,9 +631,12 @@ void async_result_test()
 	auto r1 = as::async( ex, i, j, k );
 	std::cout << typeid( r1 ).name() << "\n";
 
+	auto r2 = as::async(i, j, k );
+
 	// ex.Run();
 
 	std::cout << "result: " << r1.get() << "\n";
+	std::cout << "result: " << r2.get() << "\n";
 }
 
 int main(int argc, char *argv[])
