@@ -92,7 +92,7 @@ struct AsyncPtrSynchronizer
 
 	void SetResult()
 	{
-		ptr.reset( new T( result.Get() ) );
+		ptr.reset( new T( result.get() ) );
 		data = ptr.get();
 	}
 };
@@ -119,7 +119,7 @@ struct AsyncPtrSynchronizer<T *>
 		if (data)
 			return;
 
-		ptr.reset( result.Get() );
+		ptr.reset( result.get() );
 		data = ptr.get();
 	}
 };
@@ -140,7 +140,7 @@ struct AsyncPtrSynchronizer< std::unique_ptr<T> >
 		if (data)
 			return;
 
-		ptr = std::move( result.Get() );
+		ptr = std::move( result.get() );
 		data = ptr.get();
 	}
 };
@@ -276,7 +276,7 @@ public:
 template<class T, class... Args>
 T *make_async_helper(Args... args)
 {
-	return new T( std::forward<Args>(args)... );
+	return new T( std::move(args)... );
 }
 
 // Construction done using constructor directly

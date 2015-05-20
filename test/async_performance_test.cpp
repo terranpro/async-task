@@ -1,7 +1,7 @@
 #include "Async.hpp"
 // #include "Sync.hpp"
 //#include "Await.hpp"
-// #include "AsyncPtr.hpp"
+#include "AsyncPtr.hpp"
 #include "ThreadExecutor.hpp"
 //#include "GlibExecutor.hpp"
 
@@ -637,6 +637,14 @@ void async_result_test()
 
 	std::cout << "result: " << r1.get() << "\n";
 	std::cout << "result: " << r2.get() << "\n";
+
+	std::cout << "make_async test...\n";
+	as::AsyncPtr<int> p1 = as::make_async<int>( []() {
+			std::this_thread::sleep_for( std::chrono::seconds(2) );
+			return 42;
+		} );
+	std::cout << "done!";
+	std::cout << *p1 << "\n";
 }
 
 int main(int argc, char *argv[])
