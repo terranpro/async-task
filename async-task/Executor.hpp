@@ -44,6 +44,16 @@ public:
 	void schedule(Handler&& handler);
 };
 
+template<class Ex>
+struct is_executor
+	: std::false_type
+{};
+
+template<>
+struct is_executor<Executor>
+	: std::true_type
+{};
+
 template<class Handler>
 void Executor::schedule(Handler&& handler)
 {

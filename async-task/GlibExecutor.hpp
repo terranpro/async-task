@@ -268,6 +268,11 @@ public:
 	}
 };
 
+template<>
+struct is_executor<GlibExecutor>
+	: std::true_type
+{};
+
 } // namespace as
 
 #endif // AS_GLIB_EXECUTOR_HPP

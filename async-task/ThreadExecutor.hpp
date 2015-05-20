@@ -465,6 +465,11 @@ Executor& Executor::GetDefault()
 	return ex;
 }
 
+template<>
+struct is_executor<ThreadExecutor>
+	: std::true_type
+{};
+
 } // namespace as
 
 #endif // AS_THREAD_EXECUTOR_HPP

@@ -67,31 +67,6 @@ struct async_result_invocation<void>
 	}
 };
 
-template<class Ex>
-struct is_executor
-	: std::false_type
-{};
-
-template<>
-struct is_executor<ThreadExecutor>
-	: std::true_type
-{};
-
-/// Dispatch a callback in the default thread context
-template<class Func, class... Args, class = typename std::enable_if< !is_executor<Func>::value >::type >
-auto async_impl(std::false_type, Func&& func, Args&&... args)
-	-> decltype( async_impl( std::true_type{},
-	                         ThreadExecutor::GetDefault(),
-	                         std::forward<Func>(func),
-	                         std::forward<Args>(args)... ) )
-{
-	return async_impl( std::true_type{},
-	                   ThreadExecutor::GetDefault(),
-	                   std::forward<Func>(func),
-	                   std::forward<Args>(args)... );
-}
-
-
 template<class ArgTuple, class Enable = void>
 struct invoker_impl;
 
