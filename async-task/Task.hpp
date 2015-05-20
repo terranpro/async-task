@@ -16,13 +16,14 @@
 //#undef AS_USE_COROUTINE_TASKS
 
 #include "TaskImpl.hpp"
-#include "TaskControlBlock.hpp"
 #include "TaskStatus.hpp"
 #include "Channel.hpp"
 
 #ifdef AS_USE_COROUTINE_TASKS
 #include "CoroutineTaskImpl.hpp"
 #endif // AS_USE_COROUTINE_TASKS
+
+#include <cassert>
 
 namespace as {
 

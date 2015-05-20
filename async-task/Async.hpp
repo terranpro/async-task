@@ -1,5 +1,5 @@
 //
-//  Async.hpp - Async dispatch of functions via executors and locked objects
+//  Async.hpp - Async dispatch of functions via executors
 //
 //  Copyright (c) 2015 Brian Fransioli
 //

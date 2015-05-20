@@ -11,7 +11,7 @@
 #ifndef AS_TASK_IMPL_HPP
 #define AS_TASK_IMPL_HPP
 
-#include "TaskControlBlock.hpp"
+#include "TaskStatus.hpp"
 #include "CallableTraits.hpp"
 
 #include <memory>

@@ -9,32 +9,20 @@
 //  http://www.boost.org/LICENSE_1_0.txt
 //
 
-#ifndef AS_TASK_CONTROL_BLOCK_HPP
-#define AS_TASK_CONTROL_BLOCK_HPP
+#ifndef AS_ASYNC_RESULT_HPP
+#define AS_ASYNC_RESULT_HPP
 
-#include "TaskStatus.hpp"
-#include "Channel.hpp"
-
-#include <type_traits>
-
-#include <cassert>
+#include <memory>
+#include <mutex>
+#include <condition_variable>
 
 namespace as {
 
-class Invoker
-{
-public:
-	virtual TaskStatus operator()() = 0;
-
-protected:
-	virtual ~Invoker() {}
-};
-
-struct BaseInvokerStorage
+struct AsyncResultStorageBase
 {
 	bool is_set_;
 
-	BaseInvokerStorage()
+	AsyncResultStorageBase()
 		: is_set_(false)
 	{}
 
@@ -50,8 +38,8 @@ struct BaseInvokerStorage
 };
 
 template<class Ret>
-struct InvokerStorage
-	: BaseInvokerStorage
+struct AsyncResultStorage
+	: AsyncResultStorageBase
 {
 	std::unique_ptr<Ret> res;
 
@@ -65,7 +53,7 @@ struct InvokerStorage
 	void set(R&& r)
 	{
 		res.reset( new Ret( std::forward<R>(r) ) );
-		BaseInvokerStorage::set();
+		AsyncResultStorageBase::set();
 	}
 
 	Ret& get() const
@@ -75,8 +63,8 @@ struct InvokerStorage
 };
 
 template<>
-struct InvokerStorage<void>
-	: BaseInvokerStorage
+struct AsyncResultStorage<void>
+	: AsyncResultStorageBase
 {
 	template<class Func>
 	void operator()(Func&& func)
@@ -89,68 +77,12 @@ struct InvokerStorage<void>
 	void get() const {}
 };
 
-struct callable
-{
-	virtual ~callable() {}
-	virtual void operator()() = 0;
-};
-
-template<class Func>
-struct callable_impl
-	: public callable
-{
-	Func func;
-
-	callable_impl(Func&& f)
-		: func( std::move(f) )
-	{}
-
-	virtual void operator()()
-	{
-		func();
-	}
-};
-
-template<class Func, class... Args>
-std::unique_ptr<callable>
-make_callable( Func&& func, Args&&... args )
-{
-	auto binder = std::bind( std::forward<Func>(func),
-	                         std::forward<Args>(args)... );
-
-	return std::unique_ptr<callable>( new callable_impl<decltype(binder)>( std::move(binder) ) );
-}
-
-template<class Ret>
-class BaseInvoker
-	: public Invoker
-{
-	std::unique_ptr<callable> func;
-
-public:
-	template<class Func>
-	BaseInvoker(Func&& f)
-		: func( new callable_impl<Func>( std::move(f) ) )
-	{}
-
-	BaseInvoker(BaseInvoker&&) = default;
-
-	virtual ~BaseInvoker()
-	{}
-
-	virtual TaskStatus operator()()
-	{
-		(*func)();
-		return TaskStatus::Finished;
-	}
-};
-
 template<class Ret>
 class AsyncResult
 {
 	std::mutex mut;
 	std::condition_variable cond;
-	InvokerStorage<Ret> storage;
+	AsyncResultStorage<Ret> storage;
 
 public:
 	template<class R>
@@ -193,11 +125,6 @@ public:
 	}
 };
 
-template<class Inv>
-struct ResultSelector;
-
-
-
 } // namespace as
 
-#endif // AS_TASK_CONTROL_BLOCK_HPP
+#endif // AS_ASYNC_RESULT_HPP

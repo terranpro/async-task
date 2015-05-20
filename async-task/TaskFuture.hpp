@@ -11,7 +11,7 @@
 #ifndef AS_TASK_FUTURE_HPP
 #define AS_TASK_FUTURE_HPP
 
-#include "TaskControlBlock.hpp"
+#include "AsyncResult.hpp"
 
 #include <memory>
 
