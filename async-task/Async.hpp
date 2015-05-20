@@ -77,28 +77,6 @@ struct is_executor<ThreadExecutor>
 	: std::true_type
 {};
 
-template<class Ex, class... Funcs>
-auto async_impl(std::true_type, Ex& ex, Funcs&&... funcs)
-	-> TaskFuture< typename ChainResultOf<std::tuple<>,
-	                                      typename std::remove_reference<Funcs>::type...
-	                                     >::type >
-{
-	using result_type = typename ChainResultOf<std::tuple<>,
-	                                           typename std::remove_reference<Funcs>::type...
-	                                          >::type;
-
-	auto r = std::make_shared<AsyncResult<result_type>>();
-
-	auto c = build_chain( ex,
-	                      std::forward<Funcs>(funcs)...,
-	                      async_result_invocation<result_type>(r)
-	                    );
-
-	schedule( ex, AsyncTask<result_type, decltype(c)>( std::move(c), r ) );
-
-	return {std::move(r)};
-}
-
 /// Dispatch a callback in the default thread context
 template<class Func, class... Args, class = typename std::enable_if< !is_executor<Func>::value >::type >
 auto async_impl(std::false_type, Func&& func, Args&&... args)
@@ -107,19 +85,74 @@ auto async_impl(std::false_type, Func&& func, Args&&... args)
 	                         std::forward<Func>(func),
 	                         std::forward<Args>(args)... ) )
 {
-	// ThreadExecutor c;
-
 	return async_impl( std::true_type{},
 	                   ThreadExecutor::GetDefault(),
 	                   std::forward<Func>(func),
 	                   std::forward<Args>(args)... );
 }
 
-template<class T, class... Args>
-auto async(T&& t, Args&&... args)
-	-> decltype( async_impl( typename is_executor<typename std::decay<T>::type>::type{}, std::forward<T>(t), std::forward<Args>(args)... ) )
+
+template<class ArgTuple, class Enable = void>
+struct invoker_impl;
+
+template<class Ex, class... Args>
+struct invoker_impl<std::tuple<Ex, Args...>,
+                    typename std::enable_if< is_executor< typename std::remove_reference<Ex>::type >::value >::type >
 {
-	return async_impl( typename is_executor< typename std::decay<T>::type >::type{}, std::forward<T>(t), std::forward<Args>(args)... );
+	typedef typename ChainResultOf<std::tuple<>,
+	                               typename std::remove_reference<Args>::type...
+	                              >::type result_type;
+
+	typedef TaskFuture<result_type> future_type;
+
+	template<class E, class... Funcs>
+	static future_type async(E&& ex, Funcs&&... funcs)
+	{
+		auto r = std::make_shared<AsyncResult<result_type>>();
+
+		auto c = build_chain( ex,
+		                      std::forward<Funcs>(funcs)...,
+		                      async_result_invocation<result_type>(r)
+		                    );
+
+		schedule( ex, AsyncTask<result_type, decltype(c)>( std::move(c), r ) );
+
+		return {std::move(r)};
+	}
+};
+
+template<class Func, class... Args>
+struct invoker_impl<std::tuple<Func, Args...>,
+                    typename std::enable_if< !is_executor< typename std::remove_reference<Func>::type >::value >::type >
+{
+	typedef typename ChainResultOf<std::tuple<>,
+	                               typename std::remove_reference<Func>::type,
+	                               typename std::remove_reference<Args>::type...
+	                              >::type result_type;
+
+	typedef TaskFuture<result_type> future_type;
+
+	template<class... Funcs>
+	static future_type async(Funcs&&... funcs)
+	{
+		using chain_type = invoker_impl< std::tuple<ThreadExecutor, Func, Args...> >;
+
+		auto& ex = ThreadExecutor::GetDefault();
+
+		return chain_type::async( ex, std::forward<Funcs>(funcs)... );
+	}
+};
+
+template<class... Args>
+struct invoker
+	: invoker_impl< std::tuple<Args...> >
+{};
+
+template<class... Args>
+auto async(Args&&... args)
+	-> typename invoker<Args...>::future_type
+{
+	return invoker<Args...>::async( std::forward<Args>(args)... );
 }
 
 } // namespace as
