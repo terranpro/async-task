@@ -13,6 +13,7 @@
 
 #include "TaskStatus.hpp"
 #include "CallableTraits.hpp"
+#include "AsyncResult.hpp"
 
 #include <memory>
 #include <functional>

@@ -12,25 +12,18 @@
 #define AS_SYNC_HPP
 
 #include "Executor.hpp"
+#include "Async.hpp"
 
 #include <memory>
 
 namespace as {
 
-template<class Func, class... Args>
-auto sync(Executor& context, Func&& func, Args&&... args)
+template<class Ex, class Func, class... Args>
+auto sync(Ex& context, Func&& func, Args&&... args)
 	-> decltype( std::declval<Func>()(std::declval<Args>()...) )
 {
-	if ( context.IsCurrent() )
-		return std::forward<Func>(func)( std::forward<Args>(args)... );
-
-
-	auto timpl = make_task<TaskImplBase>( std::forward<Func>(func),
-	                                      std::forward<Args>(args)... );
-
-	context.Schedule( {timpl} );
-
-	return timpl->GetControlBlock()->Get();
+	return as::async( context, std::forward<Func>(func),
+	                  std::forward<Args>(args)... ).get();
 }
 
 template<class Func, class... Args>
