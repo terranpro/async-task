@@ -21,62 +21,6 @@
 
 namespace as {
 
-class TaskImpl
-{
-public:
-	virtual ~TaskImpl() {}
-
-	virtual TaskStatus Invoke() = 0;
-	virtual void Yield() = 0;
-	virtual void Cancel() = 0;
-	//virtual bool IsFinished() const = 0;
-};
-
-// template<class Invoker, class Result>
-
-template< class Handler >
-class TaskImplBase
-	: public TaskImpl
-{
-protected:
-	Handler handler;
-
-public:
-	TaskImplBase() = default;
-
-	template<class Func, class... Args,
-	         class =
-	         typename std::enable_if< !std::is_same<TaskImplBase,
-	                                                typename std::decay<Func>::type
-	                                               >::value
-	                                >::type
-	        >
-	TaskImplBase( Func&& func, Args&&... args )
-		: handler( std::bind( std::forward<Func>(func),
-		                      std::forward<Args>(args)... ) )
-	{}
-
-	TaskImplBase(TaskImplBase&&) = default;
-
-	virtual ~TaskImplBase()
-	{}
-
-	virtual TaskStatus Invoke()
-	{
-		return handler();
-	}
-
-	virtual void Yield()
-	{}
-
-	virtual void Cancel()
-	{
-	}
-};
-
-// template<class Exec = void, class... >
-// struct PostInvoker
-
 // Move the indices stuff soon
 template <std::size_t... Is>
 struct indices {};

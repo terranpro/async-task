@@ -28,7 +28,9 @@ struct foo
 		return 22;
 	}
 
-	int z(int, int, char) const {}
+	int z(int, int, char) const {
+		return 42;
+	}
 
 	int operator()() const {
 		return y();
