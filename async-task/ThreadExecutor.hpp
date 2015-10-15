@@ -57,8 +57,12 @@ struct ThreadWorkImpl
 
 	virtual bool operator()()
 	{
-		if ( func.Invoke() == TaskStatus::Finished )
+		auto res = func.Invoke();
+
+		if ( res == TaskStatus::Finished ||
+		     res == TaskStatus::Canceled )
 			return true;
+
 		return false;
 	}
 };

@@ -14,6 +14,7 @@
 #include "AsyncResult.hpp"
 
 #include <memory>
+#include <atomic>
 
 namespace as {
 
@@ -32,6 +33,11 @@ public:
 	T get()
 	{
 		return result->get();
+	}
+
+	void cancel()
+	{
+		result->cancel();
 	}
 };
 

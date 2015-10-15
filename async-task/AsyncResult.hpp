@@ -15,6 +15,7 @@
 #include <memory>
 #include <mutex>
 #include <condition_variable>
+#include <atomic>
 
 namespace as {
 
@@ -83,6 +84,7 @@ class AsyncResult
 	std::mutex mut;
 	std::condition_variable cond;
 	AsyncResultStorage<Ret> storage;
+	std::atomic<bool> is_canceled;
 
 public:
 	template<class R>
@@ -100,6 +102,16 @@ public:
 		cond.wait( lock, [=]() { return storage.is_set(); } );
 		return storage.get();
 	}
+
+	void cancel()
+	{
+		is_canceled = true;
+	}
+
+	bool canceled() const
+	{
+		return is_canceled;
+	}
 };
 
 template<>
@@ -108,6 +120,7 @@ class AsyncResult<void>
 	std::mutex mut;
 	std::condition_variable cond;
 	bool result_set;
+	std::atomic<bool> is_canceled;
 
 public:
 	void set()
@@ -122,6 +135,16 @@ public:
 	{
 		std::unique_lock<std::mutex> lock( mut );
 		cond.wait( lock, [=]() { return result_set; } );
+	}
+
+	void cancel()
+	{
+		is_canceled = true;
+	}
+
+	bool canceled() const
+	{
+		return is_canceled;
 	}
 };
 

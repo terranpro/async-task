@@ -102,9 +102,17 @@ struct AsyncTask
 
 	TaskStatus Invoke()
 	{
+		if ( result->canceled() )
+			return TaskStatus::Canceled;
+
 		func();
 
 		return TaskStatus::Finished;
+	}
+
+	void Cancel()
+	{
+		result->cancel();
 	}
 };
 
@@ -311,9 +319,9 @@ struct chain_invocation<Ex, First, Invokers...>
 
 	template<class F, class... Is>
 	explicit chain_invocation(Ex ex, F&& i1, Is&&... invks)
-		: ex( ex )
-		, inv( std::forward<F>(i1) )
+		: inv( std::forward<F>(i1) )
 		, next( ex, std::forward<Is>(invks)... )
+		, ex( ex )
 	{}
 
 public:

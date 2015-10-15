@@ -647,6 +647,28 @@ void async_result_test()
 	std::cout << *p1 << "\n";
 }
 
+void async_cancel_test()
+{
+	as::ThreadExecutor ex;//("testing");
+
+	as::async( ex, []() {
+			std::this_thread::sleep_for( std::chrono::seconds(2) );
+			std::cout << "SLEEP DONE!\n";
+	} );
+
+	auto fut = as::async( ex, []() {
+			std::cout << "This Should not Print!\n";
+		} );
+
+	auto fut2 = as::async( ex, []() {
+			std::cout << "This Should print!\n";
+	} );
+
+	fut.cancel();
+
+	fut2.get();
+}
+
 int main(int argc, char *argv[])
 {
 	if ( argv[1] )
@@ -677,6 +699,8 @@ int main(int argc, char *argv[])
 	async_result_test();
 
 	// invoker_test();
+
+	async_cancel_test();
 
 	return 0;
 }
