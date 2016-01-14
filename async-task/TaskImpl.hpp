@@ -315,10 +315,10 @@ struct chain_invocation<Ex, First, Invokers...>
 
 	invocation<First> inv;
 	base_type next;
-	Ex ex;
+	Ex& ex;
 
 	template<class F, class... Is>
-	explicit chain_invocation(Ex ex, F&& i1, Is&&... invks)
+	explicit chain_invocation(Ex& ex, F&& i1, Is&&... invks)
 		: inv( std::forward<F>(i1) )
 		, next( ex, std::forward<Is>(invks)... )
 		, ex( ex )
@@ -349,8 +349,8 @@ struct chain_invocation<Ex, bound_invocation<FirstEx,First>, Invokers...>
 	executor_type ex;
 
 	template<class F, class... Is>
-	explicit chain_invocation(Ex ex, bound_invocation<FirstEx,F> i1, Is&&... invks)
-		: ex( std::move(i1.ex) )
+	explicit chain_invocation(Ex& ex, bound_invocation<FirstEx,F> i1, Is&&... invks)
+		: ex( i1.ex )
 		, inv( std::move(i1.inv) )
 		, next( ex, std::forward<Is>(invks)... )
 	{}
@@ -380,11 +380,11 @@ template<class Ex, class First>
 struct chain_invocation<Ex, First>
 {
 	invocation<First> inv;
-	Ex ex;
+	Ex& ex;
 
-	explicit chain_invocation(Ex ex, First&& f)
+	explicit chain_invocation(Ex& ex, First&& f)
 		: inv(std::move(f))
-		, ex(std::move(ex))
+		, ex(ex)
 	{}
 
 	template<class... Args>
@@ -408,9 +408,9 @@ struct chain_invocation<Ex, bound_invocation<FirstEx,First>>
 	invocation<First> inv;
 	executor_type ex;
 
-	explicit chain_invocation(Ex ex, bound_invocation<FirstEx,First> i1)
+	explicit chain_invocation(Ex& ex, bound_invocation<FirstEx,First> i1)
 		: inv(std::move(i1.inv))
-		, ex(std::move(i1.ex))
+		, ex(i1.ex)
 	{}
 
 	template<class... Args>

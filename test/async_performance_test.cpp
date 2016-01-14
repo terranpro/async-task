@@ -657,7 +657,8 @@ void async_cancel_test()
 	} );
 
 	auto fut = as::async( ex, []() {
-			std::cout << "This Should not Print!\n";
+			std::cout << "This Should NOT Print!\n";
+			assert( false );
 		} );
 
 	auto fut2 = as::async( ex, []() {

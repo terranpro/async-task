@@ -17,36 +17,27 @@
 
 namespace as {
 
-void await_schedule(Executor& context, Task task)
+// TODO: you can do this!! fighting brian~~* :D
+template<class Ex, class Func, class... Args>
+TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
+await(Ex& ex, Func&& func, Args&&... args)
 {
-	context.Schedule( std::move(task) );
+	typedef decltype( std::declval<Func>()(std::declval<Args>()...) ) result_type;
 
-	while( !task.IsFinished() ) {
-
-#ifdef AS_USE_COROUTINE_TASKS
-		if ( detail::this_task_stack.size() ) {
-			detail::this_task_stack[0]->Yield();
-		}
-#endif // AS_USE_COROUTINE_TASKS
-
-		if ( context.IsCurrent() )
-			context.Iteration();
-	}
-
-}
-
-template<class Func, class... Args>
-decltype( std::declval<Func>()(std::declval<Args>()...) )
-await(Executor& context, Func&& func, Args&&... args)
-{
 	auto bound = std::bind( std::forward<Func>(func), std::forward<Args>(args)... );
-	invocation<decltype(bound)> inv( std::move(bound) );
+	// invocation<decltype(bound)> inv( std::move(bound) );
 
-	CoroutineTaskImpl< decltype(inv) > ct{ std::move(inv) };
+	auto r = std::make_shared<AsyncResult<result_type>>();
 
-	Task task{ true, std::move(ct) };
+	auto c = build_chain( ex, std::move(bound), async_result_invocation<result_type>(r) );
 
-	await_schedule( context, std::move(task) );
+	typedef CoroutineTaskImpl< decltype(c) > coro_task_type;
+
+	coro_task_type ct{ std::move(c) };
+
+	ex.schedule( std::move(ct) );
+
+	return{ std::move(r) };
 }
 
 template<class Func, class... Args>

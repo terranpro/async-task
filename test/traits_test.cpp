@@ -18,6 +18,12 @@ int h(int j)
 void i(int)
 {}
 
+void x()
+{}
+
+void y()
+{}
+
 struct foo
 {
 	int x() {
@@ -85,6 +91,7 @@ int main(int argc, char *argv[])
 	static_assert( check_multi_result<int>(f,g), "" );
 	static_assert( check_multi_result<int>(f,g,h), "" );
 	static_assert( check_multi_result<int>(f,g,i,f), "" );
+	static_assert( check_multi_result<void>(x,y), "" );
 
 	std::cout << check_callable( std::bind(&foo::z, foo(), 1, 2, 3) ) << "\n";
 

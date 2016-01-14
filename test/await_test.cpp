@@ -1,3 +1,5 @@
+#define AS_USE_COROUTINE_TASKS
+
 #include "Await.hpp"
 #include "ThreadExecutor.hpp"
 
@@ -6,15 +8,16 @@ void coro_test()
 // #ifdef AS_USE_COROUTINE_TASKS
 
 	auto& ctxt = as::ThreadExecutor::GetDefault();
+	as::ThreadExecutor other_ctxt;
 
 	auto mega_work_r =
-		as::async( ctxt, [&]() {
+		as::await( other_ctxt, [&]() {
 				int x = 50;
 				std::cout << "Doing mega work\n";
 				while( x-- ) {
-					std::cout << ".";
+					std::cout << "A";
 					std::cout.flush();
-					std::this_thread::sleep_for( std::chrono::milliseconds(1) );
+					std::this_thread::sleep_for( std::chrono::milliseconds(100) );
 					as::this_task::yield();
 				}
 			} );
@@ -24,11 +27,20 @@ void coro_test()
 
 			as::this_task::yield();
 
-			as::await( []() {
+			auto fut = as::await( other_ctxt, []() {
 					std::cout << "Start sleep...\n";
-					std::this_thread::sleep_for( std::chrono::seconds(2) );
+
+					for ( auto i = 1; i <= 20; ++i ) {
+						std::cout << "B";
+						std::cout.flush();
+						std::this_thread::sleep_for( std::chrono::milliseconds(100) );
+						as::this_task::yield();
+					}
+
 					std::cout << "Done!\n";
 			} );
+
+			fut.get();
 
 			std::cout << "Awaiting DONE...!\n";
 	} );

@@ -17,13 +17,22 @@
 #include <boost/config.hpp>
 #include <boost/context/detail/config.hpp>
 
+#include <iostream>
+
 #include "TaskImpl.hpp"
 
 namespace as {
 
+class CoroutineTask
+{
+public:
+	virtual TaskStatus Invoke() = 0;
+	virtual void Yield() = 0;
+};
+
 namespace detail {
 
-// static thread_local std::vector< TaskImplBase * > this_task_stack{};
+static thread_local std::vector< CoroutineTask * > this_task_stack{};
 
 template< std::size_t Max, std::size_t Default, std::size_t Min >
 class simple_stack_allocator
@@ -56,7 +65,7 @@ public:
 		BOOST_ASSERT( minimum_stacksize() <= size );
 		BOOST_ASSERT( maximum_stacksize() >= size );
 
-		void *limit = static_cast< char * >( vp) - size;
+		void *limit = static_cast< char * >( vp ) - size;
 		std::free( limit );
 	}
 };
@@ -189,7 +198,7 @@ struct BoostContext
 } // namespace v2
 
 template<class TaskFunc>
-class CoroutineTaskImpl
+class CoroutineTaskPriv
 {
 	typedef detail::simple_stack_allocator<
 		MAX_STACK_SIZE,
@@ -207,20 +216,27 @@ class CoroutineTaskImpl
 private:
 	void deinitialize_context()
 	{
-		assert( stack );
-
-		alloc.deallocate( stack, stack_allocator::default_stacksize() );
+		// assert( stack );
+		if ( stack ) {
+			std::cout << "Deallocating coroutine stack...!\n";
+			alloc.deallocate( stack, stack_allocator::default_stacksize() );
+		}
 	}
 
 	static void entry_point( intptr_t p )
 	{
-		auto self = reinterpret_cast< CoroutineTaskImpl * >(p);
+		auto self = reinterpret_cast< CoroutineTaskPriv * >(p);
 
 		self->running = true;
+
+		std::cout << "self = " << self << "\n";
+		std::cout << "RUNNING = TRUE!\n";
 
 		self->on_entry();
 
 		self->running = false;
+
+		std::cout << "RUNNING = FALSE!\n";
 
 		self->bctxt.Init( self->stack, self->stack_size );
 		self->bctxt.Exit();
@@ -232,22 +248,22 @@ private:
 	}
 
 public:
-	CoroutineTaskImpl()
+	CoroutineTaskPriv()
 		: alloc()
 		, stack_size( stack_allocator::default_stacksize() )
 		, stack( alloc.allocate( stack_size ) )
-		, bctxt( &CoroutineTaskImpl::entry_point,
+		, bctxt( &CoroutineTaskPriv::entry_point,
 		         reinterpret_cast<intptr_t>(this) )
 		, running(false)
 	{
 		bctxt.Init( stack, stack_size );
 	}
 
-	CoroutineTaskImpl(typename invocation<TaskFunc>::func_type func)
+	CoroutineTaskPriv(typename invocation<TaskFunc>::func_type func)
 		: alloc()
 		, stack_size( stack_allocator::default_stacksize() )
 		, stack( alloc.allocate( stack_size ) )
-		, bctxt( &CoroutineTaskImpl::entry_point,
+		, bctxt( &CoroutineTaskPriv::entry_point,
 		         reinterpret_cast<intptr_t>(this) )
 		, taskfunc( std::move(func) )
 		, running(false)
@@ -255,19 +271,45 @@ public:
 		bctxt.Init( stack, stack_size );
 	}
 
-	~CoroutineTaskImpl()
+	~CoroutineTaskPriv()
 	{
-		deinitialize_context();
+		std::cout << "THIS = " << this << "\n";
+		std::cout << __PRETTY_FUNCTION__ << "\n";
+		if ( !running )
+			deinitialize_context();
+	}
+
+	CoroutineTaskPriv(CoroutineTaskPriv&& other)
+		: alloc( std::move(other.alloc) )
+		, stack_size( other.stack_size )
+		, stack( other.stack )
+		, bctxt( other.bctxt )
+		, taskfunc( std::move(other.taskfunc) )
+		, running( other.running )
+	{
+		if ( this == &other )
+			return;
+
+		std::cout << "THIS = " << this << "\n";
+
+		other.stack = nullptr;
+		other.running = false;
 	}
 
 public:
 	TaskStatus Invoke()
 	{
-		// detail::this_task_stack.insert( std::begin(detail::this_task_stack), this );
+		// std::cout << "THIS = " << this << "\n";
+
+		//		detail::this_task_stack.insert( std::begin(detail::this_task_stack), this );
 
 		bctxt.Invoke();
 
-		// detail::this_task_stack.erase( std::begin(detail::this_task_stack) );
+		//		detail::this_task_stack.erase( std::begin(detail::this_task_stack) );
+
+		// std::cout << "THIS = " << this << "\n";
+
+		// std::cout << "RETURN: " << running << "\n";
 
 		return running ? TaskStatus::Repeat : TaskStatus::Finished;
 	}
@@ -281,14 +323,56 @@ public:
 	{}
 };
 
+template<class TaskFunc>
+class CoroutineTaskImpl
+	: public CoroutineTask
+{
+	std::unique_ptr< CoroutineTaskPriv<TaskFunc> > priv;
+
+public:
+	CoroutineTaskImpl()
+		: priv( new CoroutineTaskPriv<TaskFunc>() )
+	{}
+
+	CoroutineTaskImpl(typename invocation<TaskFunc>::func_type func)
+		: priv( new CoroutineTaskPriv<TaskFunc>(std::move(func)) )
+	{}
+
+public:
+	TaskStatus Invoke()
+	{
+		assert( priv );
+
+		detail::this_task_stack.insert( std::begin(detail::this_task_stack), this );
+
+		auto r = priv->Invoke();
+
+		detail::this_task_stack.erase( std::begin(detail::this_task_stack) );
+
+		return r;
+	}
+
+	void Yield()
+	{
+		assert( priv );
+
+		priv->Yield();
+	}
+
+	void Cancel()
+	{}
+};
+
 namespace this_task {
 
 inline void yield()
 {
-	// if ( detail::this_task_stack.size() == 0 )
-	// 	return;
+	// std::cout << "YIELD!\n";
 
-	// detail::this_task_stack[0]->Yield();
+	if ( detail::this_task_stack.size() == 0 )
+		return;
+
+	detail::this_task_stack[0]->Yield();
 }
 
 } // namespace as::ThisTask
