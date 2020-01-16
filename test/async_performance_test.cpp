@@ -645,6 +645,15 @@ void async_result_test()
 		} );
 	std::cout << "done!";
 	std::cout << *p1 << "\n";
+
+	as::ThreadExecutor ex2;
+
+	auto r3 = as::async( ex, i, j, as::bind(ex2, [](int, int) {
+				return 3;
+	}, 23, std::placeholders::_1) );
+
+
+	std::cout << "result: " << r3.get() << "\n";
 }
 
 void async_cancel_test()

@@ -81,12 +81,16 @@ struct AsyncResultStorage<void>
 template<class Ret>
 class AsyncResult
 {
-	std::mutex mut;
+	mutable std::mutex mut;
 	std::condition_variable cond;
 	AsyncResultStorage<Ret> storage;
 	std::atomic<bool> is_canceled;
 
 public:
+	AsyncResult()
+		: is_canceled(false)
+	{}
+
 	template<class R>
 	void set(R&& r)
 	{
@@ -112,17 +116,28 @@ public:
 	{
 		return is_canceled;
 	}
+
+	bool ready() const
+	{
+		std::unique_lock<std::mutex> lock( mut );
+		return storage.is_set();
+	}
 };
 
 template<>
 class AsyncResult<void>
 {
-	std::mutex mut;
+	mutable std::mutex mut;
 	std::condition_variable cond;
 	bool result_set;
 	std::atomic<bool> is_canceled;
 
 public:
+	AsyncResult()
+		: result_set(false)
+		, is_canceled(false)
+	{}
+
 	void set()
 	{
 		std::unique_lock<std::mutex> lock( mut );
@@ -145,6 +160,12 @@ public:
 	bool canceled() const
 	{
 		return is_canceled;
+	}
+
+	bool ready() const
+	{
+		std::unique_lock<std::mutex> lock( mut );
+		return result_set;
 	}
 };
 

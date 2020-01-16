@@ -41,7 +41,7 @@ await(Ex& ex, Func&& func, Args&&... args)
 }
 
 template<class Func, class... Args>
-decltype( std::declval<Func>()(std::declval<Args>()...) )
+TaskFuture< decltype( std::declval<Func>()(std::declval<Args>()...) ) >
 await(Func&& func, Args&&... args)
 {
 	//GlibExecutor ctxt;
@@ -51,6 +51,12 @@ await(Func&& func, Args&&... args)
 	              std::forward<Func>(func),
 	              std::forward<Args>(args)... );
 }
+
+#define AWAIT( fut ) \
+	do {									\
+		as::this_task::yield(); \
+		std::this_thread::sleep_for( std::chrono::microseconds(1) ); \
+	} while ( !fut.ready() )
 
 } // namespace as
 

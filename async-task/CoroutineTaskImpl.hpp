@@ -32,7 +32,42 @@ public:
 
 namespace detail {
 
-static thread_local std::vector< CoroutineTask * > this_task_stack{};
+// static thread_local std::vector< CoroutineTask * > this_task_stack{};
+
+struct coro_registry
+{
+	std::vector< CoroutineTask * > task_stack;
+
+	~coro_registry()
+	{
+		std::cout << "DESTROYING THE MANNER!\n";
+	}
+
+	static coro_registry& this_stack() {
+		static thread_local coro_registry instance{};
+		return instance;
+	}
+
+	void push(CoroutineTask *c)
+	{
+		task_stack.insert( std::begin(task_stack), c );
+	}
+
+	void pop()
+	{
+		task_stack.erase( std::begin(task_stack) );
+	}
+
+	CoroutineTask *top()
+	{
+		return task_stack[0];
+	}
+
+	size_t size() const
+	{
+		return task_stack.size();
+	}
+};
 
 template< std::size_t Max, std::size_t Default, std::size_t Min >
 class simple_stack_allocator
@@ -151,7 +186,7 @@ struct BoostContext
 {
 	typedef void (*EntryPointFunc)(intptr_t);
 
-	ctx::fcontext_t *ctxt;
+	ctx::fcontext_t ctxt;
 	ctx::fcontext_t prev_ctxt;
 	EntryPointFunc entry_point;
 	intptr_t entry_arg;
@@ -170,12 +205,12 @@ struct BoostContext
 
 	void Invoke()
 	{
-		Jump( &prev_ctxt, ctxt, entry_arg );
+		Jump( &prev_ctxt, &ctxt, entry_arg );
 	}
 
 	void Yield()
 	{
-		Jump( ctxt, &prev_ctxt, entry_arg );
+		Jump( &ctxt, &prev_ctxt, entry_arg );
 	}
 
 	void Exit()
@@ -191,7 +226,7 @@ struct BoostContext
 	           ctx::fcontext_t *next_fctx,
 	           intptr_t arg = 0 )
 	{
-		ctx::jump_fcontext( orig_fctx, next_fctx, arg );
+		ctx::jump_fcontext( orig_fctx, *next_fctx, arg );
 	}
 };
 
@@ -218,7 +253,6 @@ private:
 	{
 		// assert( stack );
 		if ( stack ) {
-			std::cout << "Deallocating coroutine stack...!\n";
 			alloc.deallocate( stack, stack_allocator::default_stacksize() );
 		}
 	}
@@ -229,14 +263,9 @@ private:
 
 		self->running = true;
 
-		std::cout << "self = " << self << "\n";
-		std::cout << "RUNNING = TRUE!\n";
-
 		self->on_entry();
 
 		self->running = false;
-
-		std::cout << "RUNNING = FALSE!\n";
 
 		self->bctxt.Init( self->stack, self->stack_size );
 		self->bctxt.Exit();
@@ -273,8 +302,6 @@ public:
 
 	~CoroutineTaskPriv()
 	{
-		std::cout << "THIS = " << this << "\n";
-		std::cout << __PRETTY_FUNCTION__ << "\n";
 		if ( !running )
 			deinitialize_context();
 	}
@@ -290,8 +317,6 @@ public:
 		if ( this == &other )
 			return;
 
-		std::cout << "THIS = " << this << "\n";
-
 		other.stack = nullptr;
 		other.running = false;
 	}
@@ -299,17 +324,7 @@ public:
 public:
 	TaskStatus Invoke()
 	{
-		// std::cout << "THIS = " << this << "\n";
-
-		//		detail::this_task_stack.insert( std::begin(detail::this_task_stack), this );
-
 		bctxt.Invoke();
-
-		//		detail::this_task_stack.erase( std::begin(detail::this_task_stack) );
-
-		// std::cout << "THIS = " << this << "\n";
-
-		// std::cout << "RETURN: " << running << "\n";
 
 		return running ? TaskStatus::Repeat : TaskStatus::Finished;
 	}
@@ -343,11 +358,15 @@ public:
 	{
 		assert( priv );
 
-		detail::this_task_stack.insert( std::begin(detail::this_task_stack), this );
+		//detail::this_task_stack.insert( std::begin(detail::this_task_stack), this );
+
+		detail::coro_registry::this_stack().push( this );
 
 		auto r = priv->Invoke();
 
-		detail::this_task_stack.erase( std::begin(detail::this_task_stack) );
+		detail::coro_registry::this_stack().pop();
+
+		//detail::this_task_stack.erase( std::begin(detail::this_task_stack) );
 
 		return r;
 	}
@@ -367,12 +386,15 @@ namespace this_task {
 
 inline void yield()
 {
-	// std::cout << "YIELD!\n";
+	// if ( detail::this_task_stack.size() == 0 )
+	// 	return;
 
-	if ( detail::this_task_stack.size() == 0 )
+	if ( detail::coro_registry::this_stack().size() == 0 )
 		return;
 
-	detail::this_task_stack[0]->Yield();
+	detail::coro_registry::this_stack().top()->Yield();
+
+	//detail::this_task_stack[0]->Yield();
 }
 
 } // namespace as::ThisTask

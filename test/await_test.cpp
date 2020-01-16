@@ -11,7 +11,7 @@ void coro_test()
 	as::ThreadExecutor other_ctxt;
 
 	auto mega_work_r =
-		as::await( other_ctxt, [&]() {
+		as::await( ctxt, [&]() {
 				int x = 50;
 				std::cout << "Doing mega work\n";
 				while( x-- ) {
@@ -27,7 +27,7 @@ void coro_test()
 
 			as::this_task::yield();
 
-			auto fut = as::await( other_ctxt, []() {
+			auto fut = as::await( ctxt, []() {
 					std::cout << "Start sleep...\n";
 
 					for ( auto i = 1; i <= 20; ++i ) {
@@ -40,7 +40,7 @@ void coro_test()
 					std::cout << "Done!\n";
 			} );
 
-			fut.get();
+			AWAIT( fut );
 
 			std::cout << "Awaiting DONE...!\n";
 	} );

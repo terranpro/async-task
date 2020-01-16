@@ -277,7 +277,18 @@ public:
 
 	void Iteration()
 	{
-		// TODO
+		auto ctx = Registry<ThreadExecutorImpl, Context>::Current(this);
+
+		for( std::unique_lock<std::mutex> lock(task_mut);
+		     ctx && (ctx->StealWork() || !ctx->priv_task_queue.Empty());
+		     lock.lock() )
+		{
+			assert( lock.owns_lock() );
+
+			lock.unlock();
+
+			DoIteration( ctx );
+		}
 	}
 
 	bool IsCurrent() const

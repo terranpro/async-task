@@ -39,6 +39,11 @@ public:
 	{
 		result->cancel();
 	}
+
+	bool ready() const
+	{
+		return result->ready();
+	}
 };
 
 } // namespace as

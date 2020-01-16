@@ -1,4 +1,4 @@
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_DEBUG_CXX_FLAGS} -O2 -rdynamic -gdwarf-2 -ftemplate-backtrace-limit=0")
+SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_DEBUG_CXX_FLAGS} -O2 -rdynamic -gdwarf-2 -ftemplate-backtrace-limit=0 -std=c++14")
 
 function(CreateTest source_file)
 
@@ -27,3 +27,4 @@ CreateTest( chain_test.cpp )
 CreateTest( traits_test.cpp )
 CreateTest( await_test.cpp )
 CreateTest( sync_test.cpp )
+CreateTest( bank_acct_test.cpp )

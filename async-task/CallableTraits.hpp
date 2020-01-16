@@ -16,6 +16,8 @@
 #include <typeinfo>
 #include <tuple>
 
+// #include "Executor.hpp"
+
 // TODO: helper for SFINAE
 template<class T>
 struct void_type
@@ -321,6 +323,13 @@ struct CallableResultHelper< std::tuple<Args...>, T,
 {
 	typedef decltype( std::declval<T>()( std::declval<Args>()... ) ) type;
 };
+
+// template<class T, class Ex, class... Args>
+// struct CallableResultHelper< std::tuple<Args...>, T, Ex,
+//                              typename std::enable_if< is_executor< typename std::remove_reference<Ex>::type >::value >::type >
+// {
+// 	typedef decltype( std::declval<T>()( std::declval<Args>()... ) ) type;
+// };
 
 template<class ArgTuple, class T>
 struct CallableResult
